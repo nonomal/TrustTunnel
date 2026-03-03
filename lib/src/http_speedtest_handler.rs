@@ -8,8 +8,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-pub(crate) const SKIPPABLE_PATH_SEGMENT: &str = "speed";
-
 const MAX_DOWNLOAD_MB: u32 = 100;
 const MAX_UPLOAD_MB: u32 = 120;
 const CHUNK_SIZE: usize = 64 * 1024;
@@ -142,15 +140,6 @@ fn prepare_speedtest(
         }
     } else {
         Cow::Borrowed(original_path)
-    };
-
-    let path = if let Some(x) = path
-        .strip_prefix('/')
-        .and_then(|x| x.strip_prefix(SKIPPABLE_PATH_SEGMENT))
-    {
-        x
-    } else {
-        path.as_ref()
     };
 
     match request.method {
