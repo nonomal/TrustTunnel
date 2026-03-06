@@ -495,7 +495,7 @@ impl Settings {
         self.built
     }
 
-    pub(crate) fn populate_credentials_file_path(&mut self) {
+    pub fn populate_credentials_file_path(&mut self) {
         self.credentials_file_path = CREDENTIALS_FILE_PATH.with(|p| p.borrow().clone());
     }
 
