@@ -244,6 +244,31 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now trusttunnel
 ```
 
+#### Reloading configuration without restart
+
+You can reload TLS hosts settings and client credentials without restarting the endpoint:
+
+```bash
+sudo systemctl reload trusttunnel
+```
+
+Or send SIGHUP signal directly:
+
+```bash
+sudo kill -HUP $(pidof trusttunnel_endpoint)
+```
+
+This will:
+- Reload `hosts.toml` (TLS certificate and hostname settings)
+- Reload `credentials.toml` (client usernames, passwords, and connection limits)
+- Apply changes atomically without dropping existing connections
+- New connections will use the updated configuration immediately
+
+> [!NOTE]
+> If the credentials file contains errors or empty credentials on a non-loopback address,
+> the reload will fail and the previous valid configuration will remain active.
+> Check the logs for error messages if reload doesn't work as expected.
+
 #### Export client configuration
 
 The endpoint binary can generate client configurations in two formats:
