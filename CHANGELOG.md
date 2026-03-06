@@ -9,8 +9,6 @@
     - Added `ExecReload` directive to systemd service template
 
   API changes in the library:
-    - Added `credentials_file_path` field to `settings::Settings` to track credentials file location
-    - Added `populate_credentials_file_path()` and `get_credentials_file_path()` methods to `settings::Settings`
     - Added `load_clients_from_file()` public function in `settings` module for standalone credential loading
     - Added `reload_credentials()` method to `core::Core` for runtime credential updates
     - Changed `authenticator` field in `core::Context` from `Option<Arc<dyn Authenticator>>` to `Arc<RwLock<Option<Arc<dyn Authenticator>>>>`

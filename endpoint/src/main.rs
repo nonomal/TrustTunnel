@@ -183,13 +183,17 @@ fn main() {
     increase_fd_limit();
 
     let settings_path = args.get_one::<String>(SETTINGS_PARAM_NAME).unwrap();
-    let mut settings: Settings = toml::from_str(
-        &std::fs::read_to_string(settings_path).expect("Couldn't read the settings file"),
-    )
-    .expect("Couldn't parse the settings file");
+    let settings_content =
+        std::fs::read_to_string(settings_path).expect("Couldn't read the settings file");
+    let settings: Settings =
+        toml::from_str(&settings_content).expect("Couldn't parse the settings file");
 
-    settings.populate_credentials_file_path();
-    let credentials_file_path = settings.get_credentials_file_path().clone();
+    let credentials_file_path: Option<String> =
+        settings_content.parse::<toml::Table>().ok().and_then(|t| {
+            t.get("credentials_file")
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        });
 
     if settings.get_clients().is_empty() && settings.get_listen_address().ip().is_loopback() {
         warn!(

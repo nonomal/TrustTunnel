@@ -11,7 +11,6 @@ use authentication::registry_based::Client;
 #[cfg(feature = "rt_doc")]
 use macros::{Getter, RuntimeDoc};
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
 use toml_edit::{Document, Item};
 
 pub type Socks5BuilderResult<T> = Result<T, Socks5Error>;
@@ -152,10 +151,6 @@ pub struct Settings {
     #[serde(rename(deserialize = "credentials_file"))]
     #[serde(deserialize_with = "deserialize_clients")]
     pub(crate) clients: Vec<Client>,
-    /// Path to the credentials file (if configured).
-    /// Stored during deserialization for use in reload operations.
-    #[serde(skip)]
-    pub(crate) credentials_file_path: Option<String>,
     /// The reverse proxy settings.
     /// With this one set up the endpoint does TLS termination on such connections and
     /// translates HTTP/x traffic into HTTP/1.1 protocol towards the server and back
@@ -495,13 +490,6 @@ impl Settings {
         self.built
     }
 
-    /// Populates the credentials_file_path field from thread-local storage.
-    /// Must be called from the same thread that deserialized this Settings instance,
-    /// immediately after deserialization completes.
-    pub fn populate_credentials_file_path(&mut self) {
-        self.credentials_file_path = CREDENTIALS_FILE_PATH.with(|p| p.borrow().clone());
-    }
-
     pub(crate) fn validate(&self) -> Result<(), ValidationError> {
         if self.listen_address.ip().is_unspecified() && self.listen_address.port() == 0 {
             return Err(ValidationError::ListenAddressNotSet);
@@ -590,7 +578,6 @@ impl Default for Settings {
             speedtest_enable: false,
             default_max_http2_conns_per_client: None,
             default_max_http3_conns_per_client: None,
-            credentials_file_path: None,
             built: false,
         }
     }
@@ -847,7 +834,6 @@ impl SettingsBuilder {
                 speedtest_enable: Settings::default_speedtest_enable(),
                 default_max_http2_conns_per_client: None,
                 default_max_http3_conns_per_client: None,
-                credentials_file_path: None,
                 built: true,
             },
         }
@@ -1429,15 +1415,6 @@ where
     deserializer.deserialize_str(Visitor)
 }
 
-// Thread-local storage for passing credentials file path from deserialize_clients()
-// to populate_credentials_file_path(). This is necessary because serde's deserialize_with
-// doesn't provide a way to return additional data alongside the deserialized value.
-// IMPORTANT: populate_credentials_file_path() must be called from the same thread that
-// performed Settings deserialization, otherwise the path will not be available.
-thread_local! {
-    static CREDENTIALS_FILE_PATH: RefCell<Option<String>> = const { RefCell::new(None) };
-}
-
 pub fn load_clients_from_file(path: &str) -> Result<Vec<Client>, String> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| format!("Couldn't read file: path={} error={}", path, e))?;
@@ -1489,11 +1466,6 @@ where
     D: serde::de::Deserializer<'de>,
 {
     let path = deserialize_file_path(deserializer)?;
-
-    CREDENTIALS_FILE_PATH.with(|p| {
-        *p.borrow_mut() = Some(path.clone());
-    });
-
     load_clients_from_file(&path).map_err(serde::de::Error::custom)
 }
 
