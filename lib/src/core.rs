@@ -20,6 +20,7 @@ use crate::{
     authentication, http_ping_handler, http_speedtest_handler, log_id, log_utils, metrics,
     net_utils, reverse_proxy, rules, settings, tls_demultiplexer, tunnel,
 };
+use crate::authentication::registry_based::RegistryBasedAuthenticator;
 use socket2::{Domain, Protocol as SockProtocol, SockRef, Socket, Type};
 use std::io;
 use std::io::ErrorKind;
@@ -232,6 +233,44 @@ impl Core {
         }
 
         *demux = TlsDemux::new(&self.context.settings, &settings)?;
+        Ok(())
+    }
+
+    /// Reload credentials from a new client list
+    pub fn reload_credentials(
+        &self,
+        clients: &[authentication::registry_based::Client],
+        listen_address: std::net::SocketAddr,
+    ) -> io::Result<()> {
+        if clients.is_empty() && !listen_address.ip().is_loopback() {
+            return Err(io::Error::new(
+                ErrorKind::InvalidInput,
+                "Cannot reload with empty credentials on non-loopback address",
+            ));
+        }
+
+        let new_authenticator: Option<Arc<dyn authentication::Authenticator>> = if !clients.is_empty() {
+            Some(Arc::new(RegistryBasedAuthenticator::new(clients)))
+        } else {
+            None
+        };
+
+        let new_limiter = if self.context.settings.default_max_http2_conns_per_client.is_some()
+            || self.context.settings.default_max_http3_conns_per_client.is_some()
+            || clients.iter().any(|c| c.max_http2_conns.is_some() || c.max_http3_conns.is_some())
+        {
+            Some(Arc::new(ConnectionLimiter::new(
+                clients,
+                self.context.settings.default_max_http2_conns_per_client,
+                self.context.settings.default_max_http3_conns_per_client,
+            )))
+        } else {
+            None
+        };
+
+        *self.context.authenticator.write().unwrap() = new_authenticator;
+        *self.context.connection_limiter.write().unwrap() = new_limiter;
+
         Ok(())
     }
 
