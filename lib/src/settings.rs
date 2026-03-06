@@ -1430,40 +1430,18 @@ thread_local! {
     static CREDENTIALS_FILE_PATH: RefCell<Option<String>> = RefCell::new(None);
 }
 
-fn deserialize_clients<'de, D>(deserializer: D) -> Result<Vec<Client>, D::Error>
-where
-    D: serde::de::Deserializer<'de>,
-{
-    let path = deserialize_file_path(deserializer)?;
+pub fn load_clients_from_file(path: &str) -> Result<Vec<Client>, String> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| format!("Couldn't read file: path={} error={}", path, e))?;
 
-    CREDENTIALS_FILE_PATH.with(|p| {
-        *p.borrow_mut() = Some(path.clone());
-    });
-
-    let content = std::fs::read_to_string(&path).map_err(|e| {
-        serde::de::Error::invalid_value(
-            serde::de::Unexpected::Other(&format!("Couldn't read file: path={} error={}", path, e)),
-            &"A readable file",
-        )
-    })?;
-
-    let clients: Document = content.parse().map_err(|e| {
-        serde::de::Error::invalid_value(
-            serde::de::Unexpected::Other(&format!(
-                "Couldn't parse file: path={} error={}",
-                path, e
-            )),
-            &"A TOML-formatted file",
-        )
-    })?;
+    let clients: Document = content
+        .parse()
+        .map_err(|e| format!("Couldn't parse file: path={} error={}", path, e))?;
 
     let res: Vec<Client> = clients
         .get("client")
         .and_then(Item::as_array_of_tables)
-        .ok_or(serde::de::Error::invalid_value(
-            serde::de::Unexpected::Other("Not an array of clients"),
-            &"An array of clients",
-        ))?
+        .ok_or_else(|| "Not an array of clients".to_string())?
         .iter()
         .enumerate()
         .map(|(idx, x)| {
@@ -1471,16 +1449,10 @@ where
             let password = demangle_toml_string(x["password"].to_string());
 
             if username.is_empty() {
-                return Err(serde::de::Error::custom(format!(
-                    "Client #{}: username cannot be empty",
-                    idx + 1
-                )));
+                return Err(format!("Client #{}: username cannot be empty", idx + 1));
             }
             if password.is_empty() {
-                return Err(serde::de::Error::custom(format!(
-                    "Client #{}: password cannot be empty",
-                    idx + 1
-                )));
+                return Err(format!("Client #{}: password cannot be empty", idx + 1));
             }
 
             let max_http2_conns = x
@@ -1502,6 +1474,19 @@ where
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(res)
+}
+
+fn deserialize_clients<'de, D>(deserializer: D) -> Result<Vec<Client>, D::Error>
+where
+    D: serde::de::Deserializer<'de>,
+{
+    let path = deserialize_file_path(deserializer)?;
+
+    CREDENTIALS_FILE_PATH.with(|p| {
+        *p.borrow_mut() = Some(path.clone());
+    });
+
+    load_clients_from_file(&path).map_err(serde::de::Error::custom)
 }
 
 fn deserialize_rules<'de, D>(deserializer: D) -> Result<Option<rules::RulesEngine>, D::Error>
@@ -1581,4 +1566,111 @@ where
 
 fn demangle_toml_string(x: String) -> String {
     x.replace('"', "").trim().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_load_clients_from_file_valid() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"
+[[client]]
+username = "user1"
+password = "pass1"
+
+[[client]]
+username = "user2"
+password = "pass2"
+max_http2_conns = 10
+max_http3_conns = 20
+"#
+        )
+        .unwrap();
+
+        let clients = load_clients_from_file(file.path().to_str().unwrap()).unwrap();
+        assert_eq!(clients.len(), 2);
+        assert_eq!(clients[0].username, "user1");
+        assert_eq!(clients[0].password, "pass1");
+        assert_eq!(clients[0].max_http2_conns, None);
+        assert_eq!(clients[0].max_http3_conns, None);
+        assert_eq!(clients[1].username, "user2");
+        assert_eq!(clients[1].password, "pass2");
+        assert_eq!(clients[1].max_http2_conns, Some(10));
+        assert_eq!(clients[1].max_http3_conns, Some(20));
+    }
+
+    #[test]
+    fn test_load_clients_from_file_invalid_toml() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, "invalid toml {{").unwrap();
+
+        let result = load_clients_from_file(file.path().to_str().unwrap());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Couldn't parse file"));
+    }
+
+    #[test]
+    fn test_load_clients_from_file_missing_file() {
+        let result = load_clients_from_file("/nonexistent/path/credentials.toml");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Couldn't read file"));
+    }
+
+    #[test]
+    fn test_load_clients_from_file_empty_username() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"
+[[client]]
+username = ""
+password = "pass1"
+"#
+        )
+        .unwrap();
+
+        let result = load_clients_from_file(file.path().to_str().unwrap());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("username cannot be empty"));
+    }
+
+    #[test]
+    fn test_load_clients_from_file_empty_password() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"
+[[client]]
+username = "user1"
+password = ""
+"#
+        )
+        .unwrap();
+
+        let result = load_clients_from_file(file.path().to_str().unwrap());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("password cannot be empty"));
+    }
+
+    #[test]
+    fn test_load_clients_from_file_not_array() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(
+            file,
+            r#"
+client = "not an array"
+"#
+        )
+        .unwrap();
+
+        let result = load_clients_from_file(file.path().to_str().unwrap());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Not an array of clients"));
+    }
 }
