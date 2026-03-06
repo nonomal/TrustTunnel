@@ -141,7 +141,8 @@ impl Tunnel {
             // sent at least one request, not to idle connections. This is done before spawning
             // so the guard lifetime matches the tunnel, not an individual request task.
             if self.connection_guard.is_none() {
-                if let Some(limiter) = self.context.connection_limiter.as_ref() {
+                let limiter_guard = self.context.connection_limiter.read().unwrap();
+                if let Some(limiter) = limiter_guard.as_ref() {
                     let auth_info = request
                         .auth_info()
                         .map(|x| x.map(authentication::Source::into_owned));

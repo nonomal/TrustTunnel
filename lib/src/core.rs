@@ -82,7 +82,7 @@ pub(crate) struct Context {
     pub metrics: Arc<Metrics>,
     next_client_id: Arc<AtomicU64>,
     next_tunnel_id: Arc<AtomicU64>,
-    pub connection_limiter: Option<Arc<ConnectionLimiter>>,
+    pub connection_limiter: Arc<RwLock<Option<Arc<ConnectionLimiter>>>>,
 }
 
 impl Context {
@@ -152,7 +152,7 @@ impl Core {
                 metrics: Metrics::new().map_err(|e| Error::Metrics(e.to_string()))?,
                 next_client_id: Default::default(),
                 next_tunnel_id: Default::default(),
-                connection_limiter,
+                connection_limiter: Arc::new(RwLock::new(connection_limiter)),
             }),
         })
     }
@@ -702,14 +702,15 @@ impl Core {
                     let auth = authentication::Source::Sni(credentials.to_string().into());
                     match authenticator.authenticate(&auth, &tunnel_id) {
                         authentication::Status::Pass => {
-                            let guard = context.connection_limiter.as_ref().and_then(|limiter| {
+                            let limiter_guard = context.connection_limiter.read().unwrap();
+                            let guard = limiter_guard.as_ref().and_then(|limiter| {
                                 let creds = match &auth {
                                     authentication::Source::Sni(s) => s.as_ref(),
                                     authentication::Source::ProxyBasic(s) => s.as_ref(),
                                 };
                                 limiter.try_acquire(creds, protocol)
                             });
-                            if context.connection_limiter.is_some() && guard.is_none() {
+                            if limiter_guard.is_some() && guard.is_none() {
                                 log_id!(
                                     debug,
                                     tunnel_id,
@@ -789,7 +790,7 @@ impl Default for Context {
             metrics: Metrics::new().unwrap(),
             next_client_id: Default::default(),
             next_tunnel_id: Default::default(),
-            connection_limiter: None,
+            connection_limiter: Arc::new(RwLock::new(None)),
         }
     }
 }
