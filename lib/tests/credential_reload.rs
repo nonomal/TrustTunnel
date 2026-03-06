@@ -18,10 +18,9 @@ password = "initial_pass"
     .unwrap();
     credentials_file.flush().unwrap();
 
-    let initial_clients = trusttunnel::settings::load_clients_from_file(
-        credentials_file.path().to_str().unwrap(),
-    )
-    .unwrap();
+    let initial_clients =
+        trusttunnel::settings::load_clients_from_file(credentials_file.path().to_str().unwrap())
+            .unwrap();
 
     assert_eq!(initial_clients.len(), 1);
     assert_eq!(initial_clients[0].username, "initial_user");

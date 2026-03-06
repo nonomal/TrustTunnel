@@ -1,3 +1,4 @@
+use crate::authentication::registry_based::RegistryBasedAuthenticator;
 use crate::connection_limiter::ConnectionLimiter;
 use crate::direct_forwarder::DirectForwarder;
 use crate::forwarder::Forwarder;
@@ -20,7 +21,6 @@ use crate::{
     authentication, http_ping_handler, http_speedtest_handler, log_id, log_utils, metrics,
     net_utils, reverse_proxy, rules, settings, tls_demultiplexer, tunnel,
 };
-use crate::authentication::registry_based::RegistryBasedAuthenticator;
 use socket2::{Domain, Protocol as SockProtocol, SockRef, Socket, Type};
 use std::io;
 use std::io::ErrorKind;
@@ -249,15 +249,26 @@ impl Core {
             ));
         }
 
-        let new_authenticator: Option<Arc<dyn authentication::Authenticator>> = if !clients.is_empty() {
-            Some(Arc::new(RegistryBasedAuthenticator::new(clients)))
-        } else {
-            None
-        };
+        let new_authenticator: Option<Arc<dyn authentication::Authenticator>> =
+            if !clients.is_empty() {
+                Some(Arc::new(RegistryBasedAuthenticator::new(clients)))
+            } else {
+                None
+            };
 
-        let new_limiter = if self.context.settings.default_max_http2_conns_per_client.is_some()
-            || self.context.settings.default_max_http3_conns_per_client.is_some()
-            || clients.iter().any(|c| c.max_http2_conns.is_some() || c.max_http3_conns.is_some())
+        let new_limiter = if self
+            .context
+            .settings
+            .default_max_http2_conns_per_client
+            .is_some()
+            || self
+                .context
+                .settings
+                .default_max_http3_conns_per_client
+                .is_some()
+            || clients
+                .iter()
+                .any(|c| c.max_http2_conns.is_some() || c.max_http3_conns.is_some())
         {
             Some(Arc::new(ConnectionLimiter::new(
                 clients,

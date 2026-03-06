@@ -427,16 +427,14 @@ fn main() {
                 if let Some(ref creds_path) = credentials_file_path {
                     info!("Reloading credentials");
                     match settings::load_clients_from_file(creds_path) {
-                        Ok(clients) => {
-                            match core.reload_credentials(&clients, listen_address) {
-                                Ok(()) => {
-                                    info!("Credentials are successfully reloaded");
-                                }
-                                Err(e) => {
-                                    error!("Failed to apply new credentials: {}", e);
-                                }
+                        Ok(clients) => match core.reload_credentials(&clients, listen_address) {
+                            Ok(()) => {
+                                info!("Credentials are successfully reloaded");
                             }
-                        }
+                            Err(e) => {
+                                error!("Failed to apply new credentials: {}", e);
+                            }
+                        },
                         Err(e) => {
                             error!("Failed to reload credentials file: {}", e);
                         }

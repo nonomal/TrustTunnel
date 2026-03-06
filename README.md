@@ -259,6 +259,7 @@ sudo kill -HUP $(pidof trusttunnel_endpoint)
 ```
 
 This will:
+
 - Reload `hosts.toml` (TLS certificate and hostname settings)
 - Reload `credentials.toml` (client usernames, passwords, and connection limits)
 - Apply changes atomically without dropping existing connections

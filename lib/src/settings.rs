@@ -1427,7 +1427,7 @@ where
 }
 
 thread_local! {
-    static CREDENTIALS_FILE_PATH: RefCell<Option<String>> = RefCell::new(None);
+    static CREDENTIALS_FILE_PATH: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
 pub fn load_clients_from_file(path: &str) -> Result<Vec<Client>, String> {

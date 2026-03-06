@@ -200,11 +200,7 @@ impl Tunnel {
                     .auth_info()
                     .map(|x| x.map(authentication::Source::into_owned));
                 let authenticator = context.authenticator.read().unwrap().clone();
-                let forwarder_auth = match (
-                    auth_info,
-                    authentication_policy,
-                    authenticator,
-                ) {
+                let forwarder_auth = match (auth_info, authentication_policy, authenticator) {
                     (Ok(Some(source)), _, Some(ref authenticator)) => {
                         match authenticator.authenticate(&source, &log_id) {
                             Status::Pass => Some(source),
