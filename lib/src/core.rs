@@ -833,3 +833,131 @@ impl Default for Context {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::authentication::registry_based::Client;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+    #[test]
+    fn test_reload_credentials_success() {
+        let core = Core {
+            context: Arc::new(Context::default()),
+        };
+
+        let clients = vec![
+            Client {
+                username: "user1".to_string(),
+                password: "pass1".to_string(),
+                max_http2_conns: None,
+                max_http3_conns: None,
+            },
+            Client {
+                username: "user2".to_string(),
+                password: "pass2".to_string(),
+                max_http2_conns: Some(10),
+                max_http3_conns: Some(20),
+            },
+        ];
+
+        let listen_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080);
+
+        let result = core.reload_credentials(&clients, listen_address);
+        assert!(result.is_ok());
+
+        let auth_guard = core.context.authenticator.read().unwrap();
+        assert!(auth_guard.is_some());
+    }
+
+    #[test]
+    fn test_reload_credentials_empty_on_loopback() {
+        let core = Core {
+            context: Arc::new(Context::default()),
+        };
+
+        let clients = vec![];
+        let listen_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080);
+
+        let result = core.reload_credentials(&clients, listen_address);
+        assert!(result.is_ok());
+
+        let auth_guard = core.context.authenticator.read().unwrap();
+        assert!(auth_guard.is_none());
+    }
+
+    #[test]
+    fn test_reload_credentials_empty_on_public_address_fails() {
+        let core = Core {
+            context: Arc::new(Context::default()),
+        };
+
+        let clients = vec![];
+        let listen_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4)), 8080);
+
+        let result = core.reload_credentials(&clients, listen_address);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn test_reload_credentials_updates_connection_limiter() {
+        let mut settings = Settings::default();
+        settings.default_max_http2_conns_per_client = Some(5);
+        settings.default_max_http3_conns_per_client = Some(10);
+
+        let core = Core {
+            context: Arc::new(Context {
+                settings: Arc::new(settings),
+                ..Context::default()
+            }),
+        };
+
+        let clients = vec![Client {
+            username: "user1".to_string(),
+            password: "pass1".to_string(),
+            max_http2_conns: Some(15),
+            max_http3_conns: Some(25),
+        }];
+
+        let listen_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080);
+
+        let result = core.reload_credentials(&clients, listen_address);
+        assert!(result.is_ok());
+
+        let limiter_guard = core.context.connection_limiter.read().unwrap();
+        assert!(limiter_guard.is_some());
+    }
+
+    #[test]
+    fn test_reload_credentials_replaces_existing() {
+        let core = Core {
+            context: Arc::new(Context::default()),
+        };
+
+        let initial_clients = vec![Client {
+            username: "old_user".to_string(),
+            password: "old_pass".to_string(),
+            max_http2_conns: None,
+            max_http3_conns: None,
+        }];
+
+        let listen_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080);
+
+        core.reload_credentials(&initial_clients, listen_address)
+            .unwrap();
+
+        let new_clients = vec![Client {
+            username: "new_user".to_string(),
+            password: "new_pass".to_string(),
+            max_http2_conns: None,
+            max_http3_conns: None,
+        }];
+
+        let result = core.reload_credentials(&new_clients, listen_address);
+        assert!(result.is_ok());
+
+        let auth_guard = core.context.authenticator.read().unwrap();
+        assert!(auth_guard.is_some());
+    }
+}
