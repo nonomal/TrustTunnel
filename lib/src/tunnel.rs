@@ -147,9 +147,8 @@ impl Tunnel {
                         .map(|x| x.map(authentication::Source::into_owned));
                     let protocol = self.downstream.protocol();
                     if let Ok(Some(source)) = auth_info {
-                        let authenticated = self
-                            .context
-                            .authenticator
+                        let authenticator = self.context.authenticator.read().unwrap();
+                        let authenticated = authenticator
                             .as_ref()
                             .map(|a| a.authenticate(&source, &self.id) == Status::Pass)
                             .unwrap_or(false);
@@ -199,12 +198,13 @@ impl Tunnel {
                 let auth_info = request
                     .auth_info()
                     .map(|x| x.map(authentication::Source::into_owned));
+                let authenticator = context.authenticator.read().unwrap().clone();
                 let forwarder_auth = match (
                     auth_info,
                     authentication_policy,
-                    context.authenticator.clone(),
+                    authenticator,
                 ) {
-                    (Ok(Some(source)), _, Some(authenticator)) => {
+                    (Ok(Some(source)), _, Some(ref authenticator)) => {
                         match authenticator.authenticate(&source, &log_id) {
                             Status::Pass => Some(source),
                             Status::Reject => {
