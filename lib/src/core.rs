@@ -971,4 +971,167 @@ mod tests {
         let auth_guard = core.context.authenticator.read().unwrap();
         assert!(auth_guard.is_some());
     }
+
+    #[test]
+    fn test_reload_credentials_authenticator_works() {
+        use crate::authentication::{Source, Status};
+        use crate::log_utils::IdChain;
+        use base64::engine::general_purpose::STANDARD as BASE64_ENGINE;
+        use base64::Engine;
+
+        let core = Core {
+            context: Arc::new(Context::default()),
+        };
+
+        let clients = vec![Client {
+            username: "testuser".to_string(),
+            password: "testpass".to_string(),
+            max_http2_conns: None,
+            max_http3_conns: None,
+        }];
+
+        let listen_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080);
+        core.reload_credentials(&clients, listen_address).unwrap();
+
+        let auth_guard = core.context.authenticator.read().unwrap();
+        let authenticator = auth_guard.as_ref().unwrap();
+
+        let valid_creds = BASE64_ENGINE.encode("testuser:testpass");
+        let invalid_creds = BASE64_ENGINE.encode("testuser:wrongpass");
+        let log_id = IdChain::<u64>::empty();
+
+        assert!(
+            authenticator.authenticate(&Source::ProxyBasic(valid_creds.into()), &log_id)
+                == Status::Pass
+        );
+        assert!(
+            authenticator.authenticate(&Source::ProxyBasic(invalid_creds.into()), &log_id)
+                == Status::Reject
+        );
+    }
+
+    #[test]
+    fn test_reload_credentials_old_creds_rejected_after_reload() {
+        use crate::authentication::{Source, Status};
+        use crate::log_utils::IdChain;
+        use base64::engine::general_purpose::STANDARD as BASE64_ENGINE;
+        use base64::Engine;
+
+        let core = Core {
+            context: Arc::new(Context::default()),
+        };
+
+        let listen_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080);
+
+        let old_clients = vec![Client {
+            username: "olduser".to_string(),
+            password: "oldpass".to_string(),
+            max_http2_conns: None,
+            max_http3_conns: None,
+        }];
+        core.reload_credentials(&old_clients, listen_address)
+            .unwrap();
+
+        let old_creds = BASE64_ENGINE.encode("olduser:oldpass");
+        let log_id = IdChain::<u64>::empty();
+
+        {
+            let auth_guard = core.context.authenticator.read().unwrap();
+            let authenticator = auth_guard.as_ref().unwrap();
+            assert!(
+                authenticator.authenticate(&Source::ProxyBasic(old_creds.clone().into()), &log_id)
+                    == Status::Pass
+            );
+        }
+
+        let new_clients = vec![Client {
+            username: "newuser".to_string(),
+            password: "newpass".to_string(),
+            max_http2_conns: None,
+            max_http3_conns: None,
+        }];
+        core.reload_credentials(&new_clients, listen_address)
+            .unwrap();
+
+        {
+            let auth_guard = core.context.authenticator.read().unwrap();
+            let authenticator = auth_guard.as_ref().unwrap();
+            assert!(
+                authenticator.authenticate(&Source::ProxyBasic(old_creds.into()), &log_id)
+                    == Status::Reject
+            );
+
+            let new_creds = BASE64_ENGINE.encode("newuser:newpass");
+            assert!(
+                authenticator.authenticate(&Source::ProxyBasic(new_creds.into()), &log_id)
+                    == Status::Pass
+            );
+        }
+    }
+
+    #[test]
+    fn test_reload_credentials_concurrent_access() {
+        use crate::authentication::Source;
+        use crate::log_utils::IdChain;
+        use base64::engine::general_purpose::STANDARD as BASE64_ENGINE;
+        use base64::Engine;
+        use std::thread;
+
+        let core = Arc::new(Core {
+            context: Arc::new(Context::default()),
+        });
+
+        let listen_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080);
+
+        let initial_clients = vec![Client {
+            username: "user".to_string(),
+            password: "pass".to_string(),
+            max_http2_conns: None,
+            max_http3_conns: None,
+        }];
+        core.reload_credentials(&initial_clients, listen_address)
+            .unwrap();
+
+        let mut handles = vec![];
+
+        for _ in 0..10 {
+            let core_clone = core.clone();
+            let handle = thread::spawn(move || {
+                let creds = BASE64_ENGINE.encode("user:pass");
+                let log_id = IdChain::<u64>::empty();
+
+                for _ in 0..100 {
+                    let auth_guard = core_clone.context.authenticator.read().unwrap().clone();
+                    if let Some(ref authenticator) = auth_guard {
+                        let _ = authenticator
+                            .authenticate(&Source::ProxyBasic(creds.clone().into()), &log_id);
+                    }
+                }
+            });
+            handles.push(handle);
+        }
+
+        for _ in 0..5 {
+            let core_clone = core.clone();
+            let handle = thread::spawn(move || {
+                for j in 0..20 {
+                    let clients = vec![Client {
+                        username: format!("user{}", j),
+                        password: format!("pass{}", j),
+                        max_http2_conns: None,
+                        max_http3_conns: None,
+                    }];
+                    let _ = core_clone.reload_credentials(&clients, listen_address);
+                }
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            handle.join().expect("Thread panicked");
+        }
+
+        let auth_guard = core.context.authenticator.read().unwrap();
+        assert!(auth_guard.is_some());
+    }
 }

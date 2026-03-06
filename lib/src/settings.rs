@@ -495,6 +495,9 @@ impl Settings {
         self.built
     }
 
+    /// Populates the credentials_file_path field from thread-local storage.
+    /// Must be called from the same thread that deserialized this Settings instance,
+    /// immediately after deserialization completes.
     pub fn populate_credentials_file_path(&mut self) {
         self.credentials_file_path = CREDENTIALS_FILE_PATH.with(|p| p.borrow().clone());
     }
@@ -1426,6 +1429,11 @@ where
     deserializer.deserialize_str(Visitor)
 }
 
+// Thread-local storage for passing credentials file path from deserialize_clients()
+// to populate_credentials_file_path(). This is necessary because serde's deserialize_with
+// doesn't provide a way to return additional data alongside the deserialized value.
+// IMPORTANT: populate_credentials_file_path() must be called from the same thread that
+// performed Settings deserialization, otherwise the path will not be available.
 thread_local! {
     static CREDENTIALS_FILE_PATH: RefCell<Option<String>> = const { RefCell::new(None) };
 }
