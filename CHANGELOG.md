@@ -1,5 +1,10 @@
 # CHANGELOG
 
+- [Feature] Added destination port filtering to rules config
+    - Added `[inbound]` section for client filtering
+    - Added `[outbound]` section for destination filtering
+    - Rules in legacy configs are treated as `[inbound]`
+
 ## 1.0.11
 
 - [Security] Fixed traffic leaking to local network via UDP, ICMP, and SOCKS5 forwarders

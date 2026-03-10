@@ -1566,14 +1566,8 @@ fn parse_rules_document(rules_doc: &Document) -> rules::RulesConfig {
         return rules::RulesConfig { inbound, outbound };
     }
 
-    // Fallback: legacy flat [[rule]] format (pre-v1.0.12)
+    // Fallback to flat [[rule]] format
     if let Some(legacy_rules) = rules_doc.get("rule").and_then(Item::as_array_of_tables) {
-        log::warn!(
-            "rules.toml uses deprecated [[rule]] format. \
-             Please migrate to [inbound]/[outbound] sections. \
-             See CONFIGURATION.md for the new format."
-        );
-
         let rules: Vec<rules::InboundRule> = legacy_rules
             .iter()
             .filter_map(|rule_table| {
