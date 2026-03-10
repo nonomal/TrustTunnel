@@ -8,6 +8,7 @@
     - [Cross-compiling for Linux](#cross-compiling-for-linux)
 - [Usage](#usage)
     - [Setup](#setup)
+    - [Run with External Configuration (CI/CD)](#run-with-external-configuration-cicd)
     - [Customized Configuration](#customized-configuration)
 - [See Also](#see-also)
 
@@ -103,6 +104,38 @@ docker run -it trusttunnel-endpoint:latest --name trusttunnel-endpoint # Create 
 
 docker start -i trusttunnel-endpoint # If you need to start your VPN endpoint again
 ```
+
+### Run with External Configuration (CI/CD)
+
+If your CI/CD pipeline generates configuration files externally, you can run the container
+without setup wizard interaction by mounting those files into the working directory volume.
+
+Expected files under `/trusttunnel_endpoint`:
+
+- `vpn.toml`
+- `hosts.toml`
+- `credentials.toml`
+- Optional: `rules.toml`
+- Optional: `certs/` (if certificate files are referenced from `hosts.toml`)
+
+`docker-compose.yml` maps host HTTPS to a high port inside the container:
+
+- Host `443/tcp` -> Container `8443/tcp`
+- Host `443/udp` -> Container `8443/udp`
+
+Therefore, make sure your `vpn.toml` listens on `0.0.0.0:8443`.
+
+Start with compose:
+
+```shell
+docker compose up -d --build
+```
+
+Notes:
+
+- No setup-related environment variables are required in this mode.
+- Port `80:80` is only needed for in-container Let's Encrypt HTTP-01 issuance/renewal.
+  If certificates are provided externally, this mapping can be removed.
 
 ### Customized Configuration
 

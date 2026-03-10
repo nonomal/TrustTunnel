@@ -1,7 +1,7 @@
 //! TrustTunnel Deep-Link Library
 //!
 //! This library provides encoding and decoding functionality for TrustTunnel
-//! deep-link URIs (`tt://` scheme). Deep-links allow compact, shareable
+//! deep-link URIs (`tt://?` scheme). Deep-links allow compact, shareable
 //! configuration URIs that can be used across platforms (mobile, desktop, CLI).
 //!
 
@@ -18,7 +18,7 @@ pub use types::{DeepLinkConfig, DeepLinkConfigBuilder, Protocol, TlvTag};
 // Re-export varint functions for testing
 pub use varint::{decode_varint, encode_varint};
 
-/// Encode a configuration into a deep-link URI (`tt://...`).
+/// Encode a configuration into a deep-link URI (`tt://?...`).
 ///
 /// # Errors
 ///

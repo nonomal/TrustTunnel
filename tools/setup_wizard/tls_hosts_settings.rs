@@ -47,6 +47,9 @@ pub fn build_with_runtime() -> Option<Cert> {
     if crate::get_mode() == Mode::NonInteractive {
         // Check if Let's Encrypt is requested via CLI
         if let Some(ref cert_type) = crate::get_predefined_params().cert_type {
+            if cert_type == "provided" {
+                return load_provided_cert_noninteractive();
+            }
             if cert_type == "letsencrypt" {
                 return generate_letsencrypt_cert_noninteractive();
             }
@@ -496,6 +499,29 @@ fn generate_letsencrypt_cert_noninteractive() -> Option<Cert> {
             None
         }
     }
+}
+
+fn load_provided_cert_noninteractive() -> Option<Cert> {
+    let predefined = crate::get_predefined_params();
+    let cert_chain_path = predefined
+        .cert_chain_path
+        .clone()
+        .expect("Certificate chain path is required for provided cert type");
+    let cert_key_path = predefined
+        .cert_key_path
+        .clone()
+        .expect("Certificate key path is required for provided cert type");
+    drop(predefined);
+
+    let cert = parse_cert(Either::Right((&cert_chain_path, &cert_key_path)));
+    if cert.is_none() {
+        eprintln!(
+            "Failed to load provided certificate and key from '{}' and '{}'",
+            cert_chain_path, cert_key_path
+        );
+    }
+
+    cert
 }
 
 fn parse_cert_expiration(cert_pem: &str) -> Option<String> {

@@ -21,6 +21,8 @@ const HOSTNAME_PARAM_NAME: &str = "host";
 const LIBRARY_SETTINGS_FILE_PARAM_NAME: &str = "lib_settings";
 const TLS_HOSTS_SETTINGS_FILE_PARAM_NAME: &str = "hosts_settings";
 const CERT_TYPE_PARAM_NAME: &str = "cert_type";
+const CERT_CHAIN_PATH_PARAM_NAME: &str = "cert_chain_path";
+const CERT_KEY_PATH_PARAM_NAME: &str = "cert_key_path";
 const ACME_EMAIL_PARAM_NAME: &str = "acme_email";
 const ACME_CHALLENGE_PARAM_NAME: &str = "acme_challenge";
 const ACME_STAGING_PARAM_NAME: &str = "acme_staging";
@@ -45,6 +47,8 @@ pub struct PredefinedParameters {
     pub library_settings_file: Option<String>,
     pub tls_hosts_settings_file: Option<String>,
     pub cert_type: Option<String>,
+    pub cert_chain_path: Option<String>,
+    pub cert_key_path: Option<String>,
     pub acme_email: Option<String>,
     pub acme_challenge: Option<String>,
     pub acme_staging: bool,
@@ -141,8 +145,20 @@ Required in non-interactive mode."#,
             clap::Arg::new(CERT_TYPE_PARAM_NAME)
                 .long("cert-type")
                 .action(clap::ArgAction::Set)
-                .value_parser(["self-signed", "letsencrypt"])
-                .help("Certificate type: 'self-signed' or 'letsencrypt'"),
+                .value_parser(["self-signed", "letsencrypt", "provided"])
+                .help("Certificate type: 'self-signed', 'letsencrypt', or 'provided'"),
+            clap::Arg::new(CERT_CHAIN_PATH_PARAM_NAME)
+                .long("cert-chain-path")
+                .action(clap::ArgAction::Set)
+                .value_parser(clap::builder::NonEmptyStringValueParser::new())
+                .required_if_eq(CERT_TYPE_PARAM_NAME, "provided")
+                .help("Path to provided certificate chain (required when --cert-type=provided)"),
+            clap::Arg::new(CERT_KEY_PATH_PARAM_NAME)
+                .long("cert-key-path")
+                .action(clap::ArgAction::Set)
+                .value_parser(clap::builder::NonEmptyStringValueParser::new())
+                .required_if_eq(CERT_TYPE_PARAM_NAME, "provided")
+                .help("Path to provided private key (required when --cert-type=provided)"),
             clap::Arg::new(ACME_EMAIL_PARAM_NAME)
                 .long("acme-email")
                 .action(clap::ArgAction::Set)
@@ -202,6 +218,8 @@ Required in non-interactive mode."#,
             .get_one::<String>(TLS_HOSTS_SETTINGS_FILE_PARAM_NAME)
             .cloned(),
         cert_type: args.get_one::<String>(CERT_TYPE_PARAM_NAME).cloned(),
+        cert_chain_path: args.get_one::<String>(CERT_CHAIN_PATH_PARAM_NAME).cloned(),
+        cert_key_path: args.get_one::<String>(CERT_KEY_PATH_PARAM_NAME).cloned(),
         acme_email: args.get_one::<String>(ACME_EMAIL_PARAM_NAME).cloned(),
         acme_challenge: args.get_one::<String>(ACME_CHALLENGE_PARAM_NAME).cloned(),
         acme_staging: args.get_flag(ACME_STAGING_PARAM_NAME),

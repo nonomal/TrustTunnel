@@ -3,14 +3,17 @@
 This document describes the deep link URI scheme used to share TrustTunnel
 endpoint configurations between devices and applications.
 
-Status: draft.
+Status: draft 2.
+
+- draft 2: Changed format to tt://? to use case-sensitive URL part (query) instead of case-insensitive (host)
+- draft 1: Initial specification
 
 ---
 
 ## URI Format
 
 ```uri
-tt://<base64url-encoded payload>
+tt://?<base64url-encoded payload>
 ```
 
 - **Scheme**: `tt`
@@ -135,7 +138,7 @@ anti_dpi = false
 4. **Construct** the URI:
 
    ```uri
-   tt://AQAL...  (full Base64url string)
+   tt://?AQAL...  (full Base64url string)
    ```
 
 ---
@@ -161,7 +164,7 @@ If the `0x00` tag is absent, parsers MUST assume version 0.
 Register the `tt` scheme in the application manifest. When the OS dispatches a
 deep link:
 
-1. Strip the `tt://` prefix.
+1. Strip the `tt://?` prefix.
 2. Base64url-decode the remainder.
 3. Parse the TLV binary payload.
 4. Populate the endpoint configuration and present it to the user for
@@ -169,13 +172,13 @@ deep link:
 
 ### Desktop (macOS / Windows / Linux)
 
-The `tt://` URI can be passed as a command-line argument or handled via OS URI
+The `tt://?` URI can be passed as a command-line argument or handled via OS URI
 scheme registration. The TrustTunnel client or setup wizard parses the payload
 using the same decode logic.
 
 ### QR Codes
 
-The `tt://` URI is short enough to be embedded in a QR code for easy scanning,
+The `tt://?` URI is short enough to be embedded in a QR code for easy scanning,
 enabling zero-typing configuration sharing.
 
 ---

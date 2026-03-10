@@ -200,7 +200,11 @@ pub fn decode(uri: &str) -> Result<DeepLinkConfig> {
         return Err(DeepLinkError::InvalidScheme(uri.chars().take(20).collect()));
     }
 
-    let encoded = &uri[5..]; // Strip "tt://"
+    // Strip "tt://?" or "tt://"
+    let encoded = uri
+        .strip_prefix("tt://?")
+        .or_else(|| uri.strip_prefix("tt://"))
+        .ok_or(DeepLinkError::InvalidScheme(uri.to_string()))?;
 
     // Decode base64url
     let payload = URL_SAFE_NO_PAD
@@ -287,6 +291,36 @@ mod tests {
     fn test_decode_invalid_scheme() {
         let result = decode("http://example.com");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_legacy_format_without_question_mark() {
+        // Old format tt://Base64 should still be parsed successfully
+        use crate::encode::encode_tlv_payload;
+        use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+
+        let config = DeepLinkConfig::builder()
+            .hostname("vpn.example.com".to_string())
+            .addresses(vec!["1.2.3.4:443".to_string()])
+            .username("alice".to_string())
+            .password("secret".to_string())
+            .build()
+            .unwrap();
+
+        let payload = encode_tlv_payload(&config).unwrap();
+        let encoded = URL_SAFE_NO_PAD.encode(&payload);
+
+        // Legacy format without ?
+        let legacy_uri = format!("tt://{}", encoded);
+        let decoded = decode(&legacy_uri).unwrap();
+        assert_eq!(decoded.hostname, "vpn.example.com");
+        assert_eq!(decoded.username, "alice");
+
+        // New format with ?
+        let new_uri = format!("tt://?{}", encoded);
+        let decoded2 = decode(&new_uri).unwrap();
+        assert_eq!(decoded2.hostname, "vpn.example.com");
+        assert_eq!(decoded2.username, "alice");
     }
 
     #[test]

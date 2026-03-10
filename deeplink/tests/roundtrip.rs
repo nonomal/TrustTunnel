@@ -11,7 +11,7 @@ fn test_roundtrip_minimal_config() {
         .unwrap();
 
     let uri = encode(&original).unwrap();
-    assert!(uri.starts_with("tt://"));
+    assert!(uri.starts_with("tt://?"));
 
     let decoded = decode(&uri).unwrap();
 

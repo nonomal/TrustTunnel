@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert a TrustTunnel endpoint TOML config file to a tt:// deep link URI.
+"""Convert a TrustTunnel endpoint TOML config file to a tt://? deep link URI.
 
 Usage:
     python3 config_to_deeplink.py <config.toml>
@@ -147,10 +147,10 @@ def encode_config(cfg: dict) -> bytes:
 
 
 def config_to_deeplink(cfg: dict) -> str:
-    """Convert a parsed TOML config dict to a tt:// deep link URI."""
+    """Convert a parsed TOML config dict to a tt://? deep link URI."""
     payload = encode_config(cfg)
     encoded = base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
-    return f"tt://{encoded}"
+    return f"tt://?{encoded}"
 
 
 def main() -> None:

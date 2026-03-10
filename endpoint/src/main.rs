@@ -135,7 +135,7 @@ fn main() {
                 .long("format")
                 .value_parser(["toml", "deeplink"])
                 .default_value("deeplink")
-                .help("Output format for client configuration: 'deeplink' produces tt:// URI, 'toml' produces traditional config file")
+                .help("Output format for client configuration: 'deeplink' produces tt://? URI, 'toml' produces traditional config file")
         ])
         .disable_version_flag(true)
         .get_matches();

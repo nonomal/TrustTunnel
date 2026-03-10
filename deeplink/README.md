@@ -1,6 +1,6 @@
 # TrustTunnel Deep-Link Library
 
-A standalone Rust library for encoding and decoding TrustTunnel configuration deep-links using the `tt://` URI scheme.
+A standalone Rust library for encoding and decoding TrustTunnel configuration deep-links using the `tt` URI scheme.
 
 ## Features
 
@@ -16,7 +16,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-trusttunnel-deeplink = { git = "https://github.com/TrustTunnel/TrustTunnel/deeplink" }
+trusttunnel-deeplink = { git = "https://github.com/TrustTunnel/TrustTunnel/" }
 ```
 
 ## Quick Start
@@ -37,7 +37,7 @@ let config = DeepLinkConfig::builder()
 
 let uri = encode(&config).unwrap();
 println!("Deep-link: {}", uri);
-// Output: tt://AQ92cG4uZXhhbXBsZS5jb20CAzEuMi4zLjQ6NDQzBQVhbGljZQYJc2VjcmV0MTIz
+// Output: tt://?AQ92cG4uZXhhbXBsZS5jb20CAzEuMi4zLjQ6NDQzBQVhbGljZQYJc2VjcmV0MTIz
 ```
 
 ### Decoding a Deep-Link
@@ -45,7 +45,7 @@ println!("Deep-link: {}", uri);
 ```rust
 use trusttunnel_deeplink::decode;
 
-let uri = "tt://AQ92cG4uZXhhbXBsZS5jb20CAzEuMi4zLjQ6NDQzBQVhbGljZQYJc2VjcmV0MTIz";
+let uri = "tt://?AQ92cG4uZXhhbXBsZS5jb20CAzEuMi4zLjQ6NDQzBQVhbGljZQYJc2VjcmV0MTIz";
 let config = decode(uri).unwrap();
 
 println!("Hostname: {}", config.hostname);

@@ -104,7 +104,7 @@ impl ClientConfig {
         doc.to_string()
     }
 
-    /// Generate a deep-link URI (tt://) for this client configuration.
+    /// Generate a deep-link URI (tt://?) for this client configuration.
     pub fn compose_deeplink(&self) -> std::io::Result<String> {
         use trusttunnel_deeplink::{DeepLinkConfig, Protocol};
 

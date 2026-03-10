@@ -94,7 +94,7 @@ impl fmt::Display for Protocol {
 /// TrustTunnel deep-link configuration.
 ///
 /// This struct represents all configuration fields that can be encoded into
-/// or decoded from a `tt://` deep-link URI.
+/// or decoded from a `tt://?` deep-link URI.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DeepLinkConfig {

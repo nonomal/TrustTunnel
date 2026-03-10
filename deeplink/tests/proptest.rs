@@ -83,7 +83,7 @@ proptest! {
     #[test]
     fn test_uri_starts_with_scheme(config in arbitrary_config()) {
         let uri = encode(&config).unwrap();
-        prop_assert!(uri.starts_with("tt://"));
+        prop_assert!(uri.starts_with("tt://?"));
     }
 
     #[test]

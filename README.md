@@ -183,8 +183,8 @@ The wizard will ask for the following fields, some of them have the default
 values you could safely use:
 
 - **The address to listen on** - specify the address for the endpoint to listen
-  on. Use the default `0.0.0.0:443` if you want the endpoint to listen on port
-  443 (HTTPS) on all interfaces.
+  on. Use `0.0.0.0:443` for native deployments (HTTPS on all interfaces).
+  If you run with Docker port mapping `443:8443`, set it to `0.0.0.0:8443`.
 - **Path to credentials file** - path where the user credentials for
   authorization will be stored.
 - **Username** - the username the user will use for authorization.
@@ -250,7 +250,7 @@ The endpoint binary can generate client configurations in two formats:
 
 ##### Deep-Link Format (Default)
 
-Generate a compact `tt://` URI suitable for QR codes and mobile apps:
+Generate a compact `tt://?` URI suitable for QR codes and mobile apps:
 
 ```shell
 # <client_name> - name of the client those credentials will be included in the configuration
@@ -263,7 +263,7 @@ cd /opt/trusttunnel/
 ./trusttunnel_endpoint vpn.toml hosts.toml -c <client_name> -a <address> --format deeplink
 ```
 
-This outputs a `tt://` deep-link URI that can be:
+This outputs a `tt://?` deep-link URI that can be:
 
 - Shared directly with mobile clients
 - Used with the [CLI client][trusttunnel-client] or [TrustTunnel Flutter Client][trusttunnel-flutter-client]

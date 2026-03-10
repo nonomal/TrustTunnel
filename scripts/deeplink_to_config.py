@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Convert a tt:// deep link URI back to a TrustTunnel endpoint TOML config.
+"""Convert a tt://? deep link URI back to a TrustTunnel endpoint TOML config.
 
 Usage:
-    python3 deeplink_to_config.py <tt://...>
+    python3 deeplink_to_config.py <tt://?...>
 
 See DEEP_LINK.md for the specification.
 """
@@ -242,10 +242,14 @@ def config_to_toml(cfg: dict) -> str:
 
 def deeplink_to_config(uri: str) -> dict:
     """Parse a tt:// deep link URI and return a config dict."""
-    prefix = "tt://"
-    if not uri.startswith(prefix):
-        raise ValueError(f"URI must start with {prefix!r}")
-    encoded = uri[len(prefix):]
+    prefix_new = "tt://?"
+    prefix_old = "tt://"
+    if uri.startswith(prefix_new):
+        encoded = uri[len(prefix_new):]
+    elif uri.startswith(prefix_old):
+        encoded = uri[len(prefix_old):]
+    else:
+        raise ValueError(f"URI must start with {prefix_old!r}")
     # Restore padding for base64 decoding.
     padding = (4 - len(encoded) % 4) % 4
     payload = base64.urlsafe_b64decode(encoded + "=" * padding)
@@ -254,7 +258,7 @@ def deeplink_to_config(uri: str) -> dict:
 
 def main() -> None:
     if len(sys.argv) != 2:
-        print(f"usage: {sys.argv[0]} <tt://...>", file=sys.stderr)
+        print(f"usage: {sys.argv[0]} <tt://?...>", file=sys.stderr)
         sys.exit(1)
 
     uri = sys.argv[1]

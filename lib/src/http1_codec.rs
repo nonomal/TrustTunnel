@@ -188,6 +188,11 @@ where
                         let _ = self.upload_tx.reserve().await;
                     }
                     self.transport_stream.read_buf(&mut buffer).await?;
+                } else if matches!(self.state, State::WaitingRequest(_)) {
+                    let bytes_read = self.transport_stream.read_buf(&mut buffer).await?;
+                    if bytes_read == 0 {
+                        buffer.clear();
+                    }
                 }
                 Ok(buffer)
             };

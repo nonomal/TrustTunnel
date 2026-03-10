@@ -3,6 +3,8 @@ use crate::types::{DeepLinkConfig, Protocol, TlvTag};
 use crate::varint::encode_varint;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 
+static PREFIX: &str = "tt://?";
+
 /// Encode a Tag-Length-Value entry.
 fn encode_tlv(tag: TlvTag, value: &[u8]) -> Result<Vec<u8>> {
     let mut result = encode_varint(u64::from(tag.as_u8()))?;
@@ -86,7 +88,7 @@ pub fn encode_tlv_payload(config: &DeepLinkConfig) -> Result<Vec<u8>> {
     Ok(payload)
 }
 
-/// Encode a configuration into a deep-link URI (`tt://...`).
+/// Encode a configuration into a deep-link URI (`tt://?...`).
 ///
 /// # Errors
 ///
@@ -95,7 +97,7 @@ pub fn encode_tlv_payload(config: &DeepLinkConfig) -> Result<Vec<u8>> {
 pub fn encode(config: &DeepLinkConfig) -> Result<String> {
     let payload = encode_tlv_payload(config)?;
     let encoded = encode_base64url(&payload);
-    Ok(format!("tt://{}", encoded))
+    Ok(format!("{PREFIX}{}", encoded))
 }
 
 #[cfg(test)]
@@ -199,7 +201,7 @@ mod tests {
 
         let uri = encode(&config).unwrap();
 
-        assert!(uri.starts_with("tt://"));
+        assert!(uri.starts_with(PREFIX));
         assert!(!uri.contains('='));
     }
 }

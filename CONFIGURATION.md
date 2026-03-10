@@ -87,6 +87,10 @@ The endpoint binary accepts the following command line arguments:
 
 The main settings file contains core endpoint configuration. Example:
 
+> Native deployments commonly use `listen_address = "0.0.0.0:443"`.
+> If you run Docker with host-to-container mapping `443:8443`, use
+> `listen_address = "0.0.0.0:8443"` inside `vpn.toml`.
+
 ```toml
 # The address to listen on
 listen_address = "0.0.0.0:443"

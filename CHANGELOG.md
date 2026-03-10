@@ -5,6 +5,14 @@
     - Added `[outbound]` section for destination filtering
     - Rules in legacy configs are treated as `[inbound]`
 
+## 1.0.16
+
+- [Fix] HTTP/1.1 codec busy loop when receiving partial request headers.
+
+## 1.0.13
+
+- [Fix] Change deep-link format from `tt://` to `tt://?`. For backward compatibility, `tt://` is still supported.
+
 ## 1.0.11
 
 - [Security] Fixed traffic leaking to local network via UDP, ICMP, and SOCKS5 forwarders

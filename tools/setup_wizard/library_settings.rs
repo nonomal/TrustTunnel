@@ -27,7 +27,7 @@ pub fn build() -> Built {
                 .unwrap_or_else(|| {
                     ask_for_input(
                         &format!(
-                            "{} (use 0.0.0.0:443 for all interfaces on HTTPS port)",
+                            "{} (native: 0.0.0.0:443; Docker with 443:8443 mapping: 0.0.0.0:8443)",
                             Settings::doc_listen_address()
                         ),
                         Some(Settings::default_listen_address().to_string()),
