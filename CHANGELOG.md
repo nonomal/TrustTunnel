@@ -1,18 +1,8 @@
 # CHANGELOG
 
 - [Feature] SIGHUP credential reload support
-    - Credentials from `credentials.toml` can now be reloaded without restarting the endpoint
-    - Send SIGHUP signal to the process or use `systemctl reload trusttunnel` to reload both TLS hosts and credentials
-    - New credentials are applied atomically; existing connections continue with old credentials
-    - Per-client connection limits are also updated during reload
-    - Empty credentials are rejected on non-loopback addresses (validation preserved)
+    - Credentials can now be reloaded without restarting the endpoint via `systemctl reload` or SIGHUP
     - Added `ExecReload` directive to systemd service template
-
-  API changes in the library:
-    - Added `load_clients_from_file()` public function in `settings` module for standalone credential loading
-    - Added `reload_credentials()` method to `core::Core` for runtime credential updates
-    - Changed `authenticator` field in `core::Context` from `Option<Arc<dyn Authenticator>>` to `Arc<RwLock<Option<Arc<dyn Authenticator>>>>`
-    - Changed `connection_limiter` field in `core::Context` from `Option<Arc<ConnectionLimiter>>` to `Arc<RwLock<Option<Arc<ConnectionLimiter>>>>`
 
 ## 1.0.16
 
