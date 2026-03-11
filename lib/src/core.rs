@@ -589,6 +589,7 @@ impl Core {
                         }
                     },
                     context.settings.tls_handshake_timeout,
+                    context.settings.speedtest_path.clone(),
                     client_id,
                 )
                 .await
@@ -681,6 +682,7 @@ impl Core {
                     context.shutdown.clone(),
                     Box::new(Http3Codec::new(socket, client_id.clone())),
                     context.settings.tls_handshake_timeout,
+                    context.settings.speedtest_path.clone(),
                     client_id,
                 )
                 .await
