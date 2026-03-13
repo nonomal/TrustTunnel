@@ -150,7 +150,6 @@ Build on macOS:
             ENDPOINT_ROOT=${PWD}
             CODESIGN_IDENTITY="Developer ID Application: Adguard Software Limited (TC3Q7MAJXF)"
             CODESIGN_IDENTIFIER="com.adguard.trusttunnel.endpoint"
-            CODESIGN_IDENTIFIER_SETUP_WIZARD="com.adguard.trusttunnel.endpoint.setup-wizard"
             export REPO_ROOT=${PWD}
             export BUILD_DIR=build_macos
 
@@ -190,11 +189,11 @@ Build on macOS:
             strip -x build_macos/trusttunnel_endpoint
             strip -x build_macos/setup_wizard
 
-            codesign -s "${CODESIGN_IDENTITY}" -i "${CODESIGN_IDENTIFIER}" --options=runtime build_macos/trusttunnel_endpoint
-            codesign -s "${CODESIGN_IDENTITY}" -i "${CODESIGN_IDENTIFIER_SETUP_WIZARD}" --options=runtime build_macos/setup_wizard
+            codesign -f -s "${CODESIGN_IDENTITY}" -i "${CODESIGN_IDENTIFIER}" --options=runtime build_macos/trusttunnel_endpoint
+            codesign -f -s "${CODESIGN_IDENTITY}" -i "${CODESIGN_IDENTIFIER}" --options=runtime build_macos/setup_wizard
 
             bundle exec fastlane notari id:"${CODESIGN_IDENTIFIER}" bundle:"${ENDPOINT_ROOT}/build_macos/trusttunnel_endpoint"
-            bundle exec fastlane notari id:"${CODESIGN_IDENTIFIER_SETUP_WIZARD}" bundle:"${ENDPOINT_ROOT}/build_macos/setup_wizard"
+            bundle exec fastlane notari id:"${CODESIGN_IDENTIFIER}" bundle:"${ENDPOINT_ROOT}/build_macos/setup_wizard"
             bundle exec fastlane remove_certs || true
 
             pushd build_macos
