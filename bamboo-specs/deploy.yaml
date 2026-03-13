@@ -152,6 +152,8 @@ Build on macOS:
             CODESIGN_IDENTIFIER="com.adguard.trusttunnel.endpoint"
             export BUILD_DIR=build_macos
 
+            printf "%b\n" "${bamboo_sshSecretKey}" | ssh-add -
+
             bundle config --local path '.bundle/vendor'
             bundle config
             bundle install
@@ -208,9 +210,9 @@ Build on macOS:
                   --pinentry-mode loopback \
                   setup_wizard
               NAME=trusttunnel-v${VERSION}-macos-universal
-              tar zcf ${NAME}.tar.gz --transform "s,^,${NAME}/," trusttunnel_endpoint trusttunnel_endpoint.sig setup_wizard setup_wizard.sig LICENSE
+              tar zcf ${NAME}.tar.gz -s ",^,${NAME}/," trusttunnel_endpoint trusttunnel_endpoint.sig setup_wizard setup_wizard.sig LICENSE
               NAME_DBG=${NAME}-dbgsym
-              tar zcf ${NAME_DBG}.tar.gz --transform "s,^,${NAME_DBG}/," trusttunnel_endpoint.dSYM setup_wizard.dSYM
+              tar zcf ${NAME_DBG}.tar.gz -s ",^,${NAME_DBG}/," trusttunnel_endpoint.dSYM setup_wizard.dSYM
             popd
   requirements:
     - ephemeral
