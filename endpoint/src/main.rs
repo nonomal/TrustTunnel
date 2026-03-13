@@ -437,7 +437,7 @@ fn main() {
                         }
                     }
                 } else {
-                    warn!("No credentials file configured, skipping credential reload");
+                    info!("No credentials file configured, skipping credential reload");
                 }
             }
         }
