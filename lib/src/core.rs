@@ -77,7 +77,7 @@ pub(crate) struct CredentialsState {
 
 pub(crate) struct Context {
     pub settings: Arc<Settings>,
-    pub credentials: Arc<RwLock<CredentialsState>>,
+    pub credentials: RwLock<CredentialsState>,
     tls_demux: Arc<RwLock<TlsDemux>>,
     pub icmp_forwarder: Option<Arc<IcmpForwarder>>,
     pub shutdown: Arc<Mutex<Shutdown>>,
@@ -142,10 +142,10 @@ impl Core {
         Ok(Self {
             context: Arc::new(Context {
                 settings: settings.clone(),
-                credentials: Arc::new(RwLock::new(CredentialsState {
+                credentials: RwLock::new(CredentialsState {
                     authenticator,
                     connection_limiter,
-                })),
+                }),
                 tls_demux: Arc::new(RwLock::new(
                     TlsDemux::new(&settings, &tls_hosts_settings)
                         .map_err(|e| Error::TlsDemultiplexer(e.to_string()))?,
@@ -845,10 +845,10 @@ impl Default for Context {
         let (fatal_error, _fatal_error_rx) = watch::channel(None);
         Self {
             settings: settings.clone(),
-            credentials: Arc::new(RwLock::new(CredentialsState {
+            credentials: RwLock::new(CredentialsState {
                 authenticator: None,
                 connection_limiter: None,
-            })),
+            }),
             tls_demux: Arc::new(RwLock::new(
                 TlsDemux::new(&settings, &settings::TlsHostsSettings::default()).unwrap(),
             )),
