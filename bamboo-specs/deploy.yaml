@@ -150,7 +150,6 @@ Build on macOS:
             ENDPOINT_ROOT=${PWD}
             CODESIGN_IDENTITY="Developer ID Application: Adguard Software Limited (TC3Q7MAJXF)"
             CODESIGN_IDENTIFIER="com.adguard.trusttunnel.endpoint"
-            export REPO_ROOT=${PWD}
             export BUILD_DIR=build_macos
 
             bundle config --local path '.bundle/vendor'

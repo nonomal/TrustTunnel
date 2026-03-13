@@ -2,13 +2,7 @@ require 'tmpdir'
 import "Subroutings"
 
 before_all do |_lane, _options|
-  ENV["BUILD_PATH"] ||= if ENV["REPO_ROOT"] && ENV["BUILD_DIR"]
-    File.join(ENV["REPO_ROOT"], ENV["BUILD_DIR"])
-  elsif ENV["REPO_ROOT"]
-    File.join(ENV["REPO_ROOT"], "build_macos")
-  else
-    File.expand_path("..", Dir.pwd)
-  end
+  ENV["BUILD_PATH"] ||= File.join(Dir.pwd, ENV["BUILD_DIR"] || "build_macos")
 
   app_store_connect_api_key(
     key_id: ENV["bamboo_appStoreConnectApiKeyId"],

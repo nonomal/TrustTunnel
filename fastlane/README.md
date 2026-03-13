@@ -39,7 +39,6 @@ Example defaults are provided in `.env.default`.
 
 Important environment variables include:
 
-- `REPO_ROOT`
 - `BUILD_DIR`
 - `MATCH_GIT_URL`
 - `MATCH_PASSWORD`
