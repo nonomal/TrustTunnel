@@ -148,6 +148,16 @@ Build on macOS:
             set -x -e
 
             ENDPOINT_ROOT=${PWD}
+            CODESIGN_IDENTITY="Developer ID Application: Adguard Software Limited (TC3Q7MAJXF)"
+            CODESIGN_IDENTIFIER="com.adguard.trusttunnel.endpoint"
+            export REPO_ROOT=${PWD}
+            export BUILD_DIR=build_macos
+
+            bundle config --local path '.bundle/vendor'
+            bundle config
+            bundle install
+            bundle exec fastlane remove_certs || true
+            bundle exec fastlane certs
 
             cargo build --release --target x86_64-apple-darwin
             cargo build --release --target aarch64-apple-darwin
@@ -178,6 +188,13 @@ Build on macOS:
 
             strip -x build_macos/trusttunnel_endpoint
             strip -x build_macos/setup_wizard
+
+            codesign -s "${CODESIGN_IDENTITY}" -i "${CODESIGN_IDENTIFIER}" --options=runtime build_macos/trusttunnel_endpoint
+            codesign -s "${CODESIGN_IDENTITY}" -i "${CODESIGN_IDENTIFIER}" --options=runtime build_macos/setup_wizard
+
+            bundle exec fastlane notari id:"${CODESIGN_IDENTIFIER}" bundle:"${ENDPOINT_ROOT}/build_macos/trusttunnel_endpoint"
+            bundle exec fastlane notari id:"${CODESIGN_IDENTIFIER}" bundle:"${ENDPOINT_ROOT}/build_macos/setup_wizard"
+            bundle exec fastlane remove_certs || true
 
             pushd build_macos
               cp ${ENDPOINT_ROOT}/LICENSE .
