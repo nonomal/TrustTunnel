@@ -429,7 +429,6 @@ fn main() {
                 info!("TLS hosts settings are successfully reloaded");
 
                 if let Some(ref creds_path) = credentials_file_path {
-                    info!("Reloading credentials");
                     match settings::load_clients_from_file(creds_path) {
                         Ok(clients) => match core.reload_credentials(&clients, listen_address) {
                             Ok(()) => {
