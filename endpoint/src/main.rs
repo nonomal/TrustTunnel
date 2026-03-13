@@ -432,7 +432,7 @@ fn main() {
                     match settings::load_clients_from_file(creds_path) {
                         Ok(clients) => match core.reload_credentials(&clients, listen_address) {
                             Ok(()) => {
-                                info!("Credentials are successfully reloaded");
+                                info!("Credentials successfully reloaded");
                             }
                             Err(e) => {
                                 error!("Failed to apply new credentials: {}", e);
