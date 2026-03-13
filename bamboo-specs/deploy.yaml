@@ -173,6 +173,12 @@ Build on macOS:
             lipo -info build_macos/trusttunnel_endpoint
             lipo -info build_macos/setup_wizard
 
+            dsymutil build_macos/trusttunnel_endpoint -o build_macos/trusttunnel_endpoint.dSYM
+            dsymutil build_macos/setup_wizard -o build_macos/setup_wizard.dSYM
+
+            strip -x build_macos/trusttunnel_endpoint
+            strip -x build_macos/setup_wizard
+
             pushd build_macos
               cp ${ENDPOINT_ROOT}/LICENSE .
               gpg --default-key "${GPG_KEY}" \
@@ -187,6 +193,8 @@ Build on macOS:
                   setup_wizard
               NAME=trusttunnel-v${VERSION}-macos-universal
               tar zcf ${NAME}.tar.gz --transform "s,^,${NAME}/," trusttunnel_endpoint trusttunnel_endpoint.sig setup_wizard setup_wizard.sig LICENSE
+              NAME_DBG=${NAME}-dbgsym
+              tar zcf ${NAME_DBG}.tar.gz --transform "s,^,${NAME_DBG}/," trusttunnel_endpoint.dSYM setup_wizard.dSYM
             popd
   requirements:
     - ephemeral
@@ -251,6 +259,7 @@ Deploy artifacts:
             gh release upload ${TAG} ../build_linux/trusttunnel-v${VERSION}-linux-x86_64-dbgsym.tar.gz
             gh release upload ${TAG} ../build_linux/trusttunnel-v${VERSION}-linux-aarch64-dbgsym.tar.gz
             gh release upload ${TAG} ../build_macos/trusttunnel-v${VERSION}-macos-universal.tar.gz
+            gh release upload ${TAG} ../build_macos/trusttunnel-v${VERSION}-macos-universal-dbgsym.tar.gz
   requirements:
     - adg-privileged-docker
   artifact-subscriptions:
