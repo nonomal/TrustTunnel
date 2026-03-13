@@ -13,6 +13,14 @@ use macros::{Getter, RuntimeDoc};
 use serde::{Deserialize, Serialize};
 use toml_edit::{Document, Item};
 
+/// Holds both the credentials file path and the loaded clients.
+/// Used for reload functionality.
+#[derive(Default, Clone)]
+pub struct ClientsWithPath {
+    pub path: Option<String>,
+    pub clients: Vec<Client>,
+}
+
 pub type Socks5BuilderResult<T> = Result<T, Socks5Error>;
 
 pub enum ValidationError {
@@ -159,8 +167,8 @@ pub struct Settings {
     #[serde(default)]
     #[serde(skip_serializing)]
     #[serde(rename(deserialize = "credentials_file"))]
-    #[serde(deserialize_with = "deserialize_clients")]
-    pub(crate) clients: Vec<Client>,
+    #[serde(deserialize_with = "deserialize_clients_with_path")]
+    pub(crate) credentials: ClientsWithPath,
     /// The reverse proxy settings.
     /// With this one set up the endpoint does TLS termination on such connections and
     /// translates HTTP/x traffic into HTTP/1.1 protocol towards the server and back
@@ -536,7 +544,7 @@ impl Settings {
         }
 
         // Do not start the endpoint without credentials on a public address
-        if self.clients.is_empty() && !self.listen_address.ip().is_loopback() {
+        if self.get_clients().is_empty() && !self.listen_address.ip().is_loopback() {
             return Err(ValidationError::NoCredentialsOnPublicAddress);
         }
 
@@ -601,6 +609,16 @@ impl Settings {
         407
     }
 
+    /// Returns the list of configured clients
+    pub fn get_clients(&self) -> &[Client] {
+        &self.credentials.clients
+    }
+
+    /// Returns the path to the credentials file, if configured
+    pub fn get_credentials_file_path(&self) -> Option<&str> {
+        self.credentials.path.as_deref()
+    }
+
     fn validate_request_path(name: &str, path: &Option<String>) -> Result<(), ValidationError> {
         if let Some(path) = path {
             if path.is_empty() || !path.starts_with('/') {
@@ -639,7 +657,7 @@ impl Default for Settings {
             tcp_connections_timeout: Settings::default_tcp_connections_timeout(),
             udp_connections_timeout: Settings::default_udp_connections_timeout(),
             forward_protocol: Default::default(),
-            clients: Default::default(),
+            credentials: Default::default(),
             listen_protocols: ListenProtocolSettings {
                 http1: Some(Http1Settings::builder().build()),
                 http2: Some(Http2Settings::builder().build()),
@@ -904,7 +922,7 @@ impl SettingsBuilder {
                 udp_connections_timeout: Settings::default_udp_connections_timeout(),
                 forward_protocol: Default::default(),
                 listen_protocols: Default::default(),
-                clients: Default::default(),
+                credentials: Default::default(),
                 reverse_proxy: None,
                 icmp: None,
                 metrics: Default::default(),
@@ -1009,7 +1027,7 @@ impl SettingsBuilder {
 
     /// Set the client authenticator
     pub fn clients(mut self, x: Vec<Client>) -> Self {
-        self.settings.clients = x;
+        self.settings.credentials.clients = x;
         self
     }
 
@@ -1567,12 +1585,16 @@ pub fn load_clients_from_file(path: &str) -> Result<Vec<Client>, String> {
     Ok(res)
 }
 
-fn deserialize_clients<'de, D>(deserializer: D) -> Result<Vec<Client>, D::Error>
+fn deserialize_clients_with_path<'de, D>(deserializer: D) -> Result<ClientsWithPath, D::Error>
 where
     D: serde::de::Deserializer<'de>,
 {
     let path = deserialize_file_path(deserializer)?;
-    load_clients_from_file(&path).map_err(serde::de::Error::custom)
+    let clients = load_clients_from_file(&path).map_err(serde::de::Error::custom)?;
+    Ok(ClientsWithPath {
+        path: Some(path),
+        clients,
+    })
 }
 
 fn deserialize_rules<'de, D>(deserializer: D) -> Result<Option<rules::RulesEngine>, D::Error>

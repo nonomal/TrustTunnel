@@ -126,12 +126,12 @@ impl Core {
         let connection_limiter = if settings.default_max_http2_conns_per_client.is_some()
             || settings.default_max_http3_conns_per_client.is_some()
             || settings
-                .clients
+                .get_clients()
                 .iter()
                 .any(|c| c.max_http2_conns.is_some() || c.max_http3_conns.is_some())
         {
             Some(Arc::new(ConnectionLimiter::new(
-                &settings.clients,
+                settings.get_clients(),
                 settings.default_max_http2_conns_per_client,
                 settings.default_max_http3_conns_per_client,
             )))
