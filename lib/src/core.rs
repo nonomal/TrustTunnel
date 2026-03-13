@@ -70,9 +70,14 @@ impl FatalIoError {
     }
 }
 
+pub(crate) struct CredentialsState {
+    pub authenticator: Option<Arc<dyn authentication::Authenticator>>,
+    pub connection_limiter: Option<Arc<ConnectionLimiter>>,
+}
+
 pub(crate) struct Context {
     pub settings: Arc<Settings>,
-    pub authenticator: Arc<RwLock<Option<Arc<dyn authentication::Authenticator>>>>,
+    pub credentials: Arc<RwLock<CredentialsState>>,
     tls_demux: Arc<RwLock<TlsDemux>>,
     pub icmp_forwarder: Option<Arc<IcmpForwarder>>,
     pub shutdown: Arc<Mutex<Shutdown>>,
@@ -83,7 +88,6 @@ pub(crate) struct Context {
     pub metrics: Arc<Metrics>,
     next_client_id: Arc<AtomicU64>,
     next_tunnel_id: Arc<AtomicU64>,
-    pub connection_limiter: Arc<RwLock<Option<Arc<ConnectionLimiter>>>>,
 }
 
 impl Context {
@@ -138,7 +142,10 @@ impl Core {
         Ok(Self {
             context: Arc::new(Context {
                 settings: settings.clone(),
-                authenticator: Arc::new(RwLock::new(authenticator)),
+                credentials: Arc::new(RwLock::new(CredentialsState {
+                    authenticator,
+                    connection_limiter,
+                })),
                 tls_demux: Arc::new(RwLock::new(
                     TlsDemux::new(&settings, &tls_hosts_settings)
                         .map_err(|e| Error::TlsDemultiplexer(e.to_string()))?,
@@ -153,7 +160,6 @@ impl Core {
                 metrics: Metrics::new().map_err(|e| Error::Metrics(e.to_string()))?,
                 next_client_id: Default::default(),
                 next_tunnel_id: Default::default(),
-                connection_limiter: Arc::new(RwLock::new(connection_limiter)),
             }),
         })
     }
@@ -279,8 +285,10 @@ impl Core {
             None
         };
 
-        *self.context.authenticator.write().unwrap() = new_authenticator;
-        *self.context.connection_limiter.write().unwrap() = new_limiter;
+        *self.context.credentials.write().unwrap() = CredentialsState {
+            authenticator: new_authenticator,
+            connection_limiter: new_limiter,
+        };
 
         Ok(())
     }
@@ -746,23 +754,27 @@ impl Core {
     ) {
         let _metrics_guard = Metrics::client_sessions_counter(context.metrics.clone(), protocol);
 
-        let authenticator = context.authenticator.read().unwrap().clone();
-        let (authentication_policy, sni_connection_guard) =
-            match authenticator.as_ref().zip(sni_auth_creds.as_ref()) {
+        let (authentication_policy, sni_connection_guard) = {
+            let creds_state = context.credentials.read().unwrap();
+            match creds_state
+                .authenticator
+                .as_ref()
+                .zip(sni_auth_creds.as_ref())
+            {
                 None => (tunnel::AuthenticationPolicy::Default, None),
                 Some((authenticator, credentials)) => {
                     let auth = authentication::Source::Sni(credentials.to_string().into());
                     match authenticator.authenticate(&auth, &tunnel_id) {
                         authentication::Status::Pass => {
-                            let limiter_guard = context.connection_limiter.read().unwrap();
-                            let guard = limiter_guard.as_ref().and_then(|limiter| {
-                                let creds = match &auth {
-                                    authentication::Source::Sni(s) => s.as_ref(),
-                                    authentication::Source::ProxyBasic(s) => s.as_ref(),
-                                };
-                                limiter.try_acquire(creds, protocol)
-                            });
-                            if limiter_guard.is_some() && guard.is_none() {
+                            let guard =
+                                creds_state.connection_limiter.as_ref().and_then(|limiter| {
+                                    let creds = match &auth {
+                                        authentication::Source::Sni(s) => s.as_ref(),
+                                        authentication::Source::ProxyBasic(s) => s.as_ref(),
+                                    };
+                                    limiter.try_acquire(creds, protocol)
+                                });
+                            if creds_state.connection_limiter.is_some() && guard.is_none() {
                                 log_id!(
                                     debug,
                                     tunnel_id,
@@ -778,7 +790,8 @@ impl Core {
                         }
                     }
                 }
-            };
+            }
+        };
 
         log_id!(debug, tunnel_id, "New tunnel for client");
         let mut tunnel = Tunnel::new(
@@ -832,7 +845,10 @@ impl Default for Context {
         let (fatal_error, _fatal_error_rx) = watch::channel(None);
         Self {
             settings: settings.clone(),
-            authenticator: Arc::new(RwLock::new(None)),
+            credentials: Arc::new(RwLock::new(CredentialsState {
+                authenticator: None,
+                connection_limiter: None,
+            })),
             tls_demux: Arc::new(RwLock::new(
                 TlsDemux::new(&settings, &settings::TlsHostsSettings::default()).unwrap(),
             )),
@@ -842,7 +858,6 @@ impl Default for Context {
             metrics: Metrics::new().unwrap(),
             next_client_id: Default::default(),
             next_tunnel_id: Default::default(),
-            connection_limiter: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -879,8 +894,8 @@ mod tests {
         let result = core.reload_credentials(&clients, listen_address);
         assert!(result.is_ok());
 
-        let auth_guard = core.context.authenticator.read().unwrap();
-        assert!(auth_guard.is_some());
+        let creds = core.context.credentials.read().unwrap();
+        assert!(creds.authenticator.is_some());
     }
 
     #[test]
@@ -895,8 +910,8 @@ mod tests {
         let result = core.reload_credentials(&clients, listen_address);
         assert!(result.is_ok());
 
-        let auth_guard = core.context.authenticator.read().unwrap();
-        assert!(auth_guard.is_none());
+        let creds = core.context.credentials.read().unwrap();
+        assert!(creds.authenticator.is_none());
     }
 
     #[test]
@@ -938,8 +953,8 @@ mod tests {
         let result = core.reload_credentials(&clients, listen_address);
         assert!(result.is_ok());
 
-        let limiter_guard = core.context.connection_limiter.read().unwrap();
-        assert!(limiter_guard.is_some());
+        let creds = core.context.credentials.read().unwrap();
+        assert!(creds.connection_limiter.is_some());
     }
 
     #[test]
@@ -970,8 +985,8 @@ mod tests {
         let result = core.reload_credentials(&new_clients, listen_address);
         assert!(result.is_ok());
 
-        let auth_guard = core.context.authenticator.read().unwrap();
-        assert!(auth_guard.is_some());
+        let creds = core.context.credentials.read().unwrap();
+        assert!(creds.authenticator.is_some());
     }
 
     #[test]
@@ -995,8 +1010,8 @@ mod tests {
         let listen_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080);
         core.reload_credentials(&clients, listen_address).unwrap();
 
-        let auth_guard = core.context.authenticator.read().unwrap();
-        let authenticator = auth_guard.as_ref().unwrap();
+        let creds = core.context.credentials.read().unwrap();
+        let authenticator = creds.authenticator.as_ref().unwrap();
 
         let valid_creds = BASE64_ENGINE.encode("testuser:testpass");
         let invalid_creds = BASE64_ENGINE.encode("testuser:wrongpass");
@@ -1038,8 +1053,8 @@ mod tests {
         let log_id = IdChain::<u64>::empty();
 
         {
-            let auth_guard = core.context.authenticator.read().unwrap();
-            let authenticator = auth_guard.as_ref().unwrap();
+            let creds = core.context.credentials.read().unwrap();
+            let authenticator = creds.authenticator.as_ref().unwrap();
             assert!(
                 authenticator.authenticate(&Source::ProxyBasic(old_creds.clone().into()), &log_id)
                     == Status::Pass
@@ -1056,8 +1071,8 @@ mod tests {
             .unwrap();
 
         {
-            let auth_guard = core.context.authenticator.read().unwrap();
-            let authenticator = auth_guard.as_ref().unwrap();
+            let creds = core.context.credentials.read().unwrap();
+            let authenticator = creds.authenticator.as_ref().unwrap();
             assert!(
                 authenticator.authenticate(&Source::ProxyBasic(old_creds.into()), &log_id)
                     == Status::Reject
@@ -1103,8 +1118,8 @@ mod tests {
                 let log_id = IdChain::<u64>::empty();
 
                 for _ in 0..100 {
-                    let auth_guard = core_clone.context.authenticator.read().unwrap().clone();
-                    if let Some(ref authenticator) = auth_guard {
+                    let creds_state = core_clone.context.credentials.read().unwrap();
+                    if let Some(ref authenticator) = creds_state.authenticator {
                         let _ = authenticator
                             .authenticate(&Source::ProxyBasic(creds.clone().into()), &log_id);
                     }
@@ -1133,7 +1148,7 @@ mod tests {
             handle.join().expect("Thread panicked");
         }
 
-        let auth_guard = core.context.authenticator.read().unwrap();
-        assert!(auth_guard.is_some());
+        let creds = core.context.credentials.read().unwrap();
+        assert!(creds.authenticator.is_some());
     }
 }
