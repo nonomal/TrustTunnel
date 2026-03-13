@@ -13,7 +13,7 @@ stages:
       final: false
       jobs:
         - Build on Linux
-        # - Build on macOS
+        - Build on macOS
   - Deploy artifacts:
       manual: false
       final: false
@@ -134,30 +134,70 @@ Build on Linux:
       required: true
       shared: true
 
-# Build on macOS:
-#   key: BM
-#   tasks:
-#     - checkout:
-#         description: Checkout Default Repository
-#         force-clean-build: 'true'
-#     - script:
-#         interpreter: SHELL
-#         scripts:
-#           - |-
-#             #!/bin/bash
-#             set -x -e
-#             cargo build --release --target x86_64-apple-darwin
-#             cp target/x86_64-apple-darwin/release/trusttunnel_endpoint target/trusttunnel_endpoint.osx-x86_64
-#   requirements:
-#     - ephemeral
-#     - image: registry.int.agrd.dev/macos/sequoia-build-agent-xcode16.1:latest
-#   artifact-subscriptions: [ ]
-#   artifacts:
-#     - name: Build result macOS
-#       location: target
-#       pattern: 'trusttunnel_endpoint.osx-x86_64'
-#       required: false
-#       shared: true
+Build on macOS:
+  key: BM
+  tasks:
+    - checkout:
+        description: Checkout Default Repository
+        force-clean-build: 'true'
+    - script:
+        interpreter: SHELL
+        scripts:
+          - |-
+            #!/bin/bash
+            set -x -e
+
+            ENDPOINT_ROOT=${PWD}
+
+            cargo build --release --target x86_64-apple-darwin
+            cargo build --release --target aarch64-apple-darwin
+
+            mkdir -p build_macos
+            VERSION=$(cat endpoint/Cargo.toml | grep "version = " | head -n 1 | sed -e 's/version = "\(.*\)"/\1/')
+
+            GPG_KEY=devteam@adguard.com
+            echo "${bamboo.gpgSecretKeyPart1}${bamboo.gpgSecretKeyPart2}"\
+                        | awk '{ gsub(/\\n/, "\n"); print; }'\
+                        | gpg --import --batch --yes
+
+            lipo -create \
+              -output build_macos/trusttunnel_endpoint \
+              target/x86_64-apple-darwin/release/trusttunnel_endpoint \
+              target/aarch64-apple-darwin/release/trusttunnel_endpoint
+
+            lipo -create \
+              -output build_macos/setup_wizard \
+              target/x86_64-apple-darwin/release/setup_wizard \
+              target/aarch64-apple-darwin/release/setup_wizard
+
+            lipo -info build_macos/trusttunnel_endpoint
+            lipo -info build_macos/setup_wizard
+
+            pushd build_macos
+              cp ${ENDPOINT_ROOT}/LICENSE .
+              gpg --default-key "${GPG_KEY}" \
+                  --detach-sig \
+                  --passphrase "${bamboo.gpgPassword}" \
+                  --pinentry-mode loopback \
+                  trusttunnel_endpoint
+              gpg --default-key "${GPG_KEY}" \
+                  --detach-sig \
+                  --passphrase "${bamboo.gpgPassword}" \
+                  --pinentry-mode loopback \
+                  setup_wizard
+              NAME=trusttunnel-v${VERSION}-macos-universal
+              tar zcf ${NAME}.tar.gz --transform "s,^,${NAME}/," trusttunnel_endpoint trusttunnel_endpoint.sig setup_wizard setup_wizard.sig LICENSE
+            popd
+  requirements:
+    - ephemeral
+    - image: registry.int.agrd.dev/macos/tahoe-build-agent-xcode26.1.1:latest
+  artifact-subscriptions: [ ]
+  artifacts:
+    - name: Build for macOS
+      location: build_macos
+      pattern: 'trusttunnel-*.tar.gz'
+      required: true
+      shared: true
 
 Deploy artifacts:
   key: DA
@@ -210,11 +250,14 @@ Deploy artifacts:
             gh release upload ${TAG} ../build_linux/trusttunnel-v${VERSION}-linux-aarch64.tar.gz
             gh release upload ${TAG} ../build_linux/trusttunnel-v${VERSION}-linux-x86_64-dbgsym.tar.gz
             gh release upload ${TAG} ../build_linux/trusttunnel-v${VERSION}-linux-aarch64-dbgsym.tar.gz
+            gh release upload ${TAG} ../build_macos/trusttunnel-v${VERSION}-macos-universal.tar.gz
   requirements:
     - adg-privileged-docker
   artifact-subscriptions:
     - artifact: Build for Linux
       destination: build_linux
+    - artifact: Build for macOS
+      destination: build_macos
   artifacts: []
 
 repositories:
