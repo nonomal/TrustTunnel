@@ -321,6 +321,14 @@ Extract the archive to a directory of your choice, for example `C:\TrustTunnel\`
 
 [trusttunnel-client-releases]: https://github.com/TrustTunnel/TrustTunnelClient/releases/latest
 
+##### Router setup
+
+For router deployments, please refer to router-specific client installation
+guides.
+
+- Keenetic routers: [TrustTunnel-Keenetic](https://github.com/artemevsevev/TrustTunnel-Keenetic)
+  (guide in Russian)
+
 #### Updating the client
 
 ##### Linux / macOS
