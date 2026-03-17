@@ -160,9 +160,6 @@ Build on macOS:
             bundle exec fastlane remove_certs || true
             bundle exec fastlane certs
 
-            cargo build --release --target x86_64-apple-darwin
-            cargo build --release --target aarch64-apple-darwin
-
             mkdir -p build_macos
             VERSION=$(cat endpoint/Cargo.toml | grep "version = " | head -n 1 | sed -e 's/version = "\(.*\)"/\1/')
 
@@ -170,6 +167,9 @@ Build on macOS:
             echo "${bamboo.gpgSecretKeyPart1}${bamboo.gpgSecretKeyPart2}"\
                         | awk '{ gsub(/\\n/, "\n"); print; }'\
                         | gpg --import --batch --yes
+
+            cargo build --release --target x86_64-apple-darwin
+            cargo build --release --target aarch64-apple-darwin
 
             lipo -create \
               -output build_macos/trusttunnel_endpoint \
@@ -187,8 +187,8 @@ Build on macOS:
             dsymutil build_macos/trusttunnel_endpoint -o build_macos/trusttunnel_endpoint.dSYM
             dsymutil build_macos/setup_wizard -o build_macos/setup_wizard.dSYM
 
-            strip -x build_macos/trusttunnel_endpoint
-            strip -x build_macos/setup_wizard
+            strip build_macos/trusttunnel_endpoint
+            strip build_macos/setup_wizard
 
             codesign -f -s "${CODESIGN_IDENTITY}" -i "${CODESIGN_IDENTIFIER}" --options=runtime build_macos/trusttunnel_endpoint
             codesign -f -s "${CODESIGN_IDENTITY}" -i "${CODESIGN_IDENTIFIER}" --options=runtime build_macos/setup_wizard
