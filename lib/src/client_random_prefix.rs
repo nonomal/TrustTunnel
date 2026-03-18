@@ -134,3 +134,74 @@ fn generate_value(mask: &[u8]) -> Vec<u8> {
 
     value
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generate_uses_default_length() {
+        let generated = generate(GeneratorParams::default()).unwrap();
+
+        assert_eq!(generated.value().len(), 4);
+        assert_eq!(generated.mask().len(), 4);
+    }
+
+    #[test]
+    fn generate_rejects_invalid_length() {
+        let err = generate(GeneratorParams {
+            length: 0,
+            percent: 70,
+        })
+        .unwrap_err();
+
+        assert_eq!(err, Error::InvalidLength(0));
+    }
+
+    #[test]
+    fn generate_rejects_invalid_percent() {
+        let err = generate(GeneratorParams {
+            length: 4,
+            percent: 0,
+        })
+        .unwrap_err();
+
+        assert_eq!(err, Error::InvalidPercent(0));
+    }
+
+    #[test]
+    fn generated_value_respects_mask_bits() {
+        let generated = generate(GeneratorParams {
+            length: 16,
+            percent: 50,
+        })
+        .unwrap();
+
+        for (value, mask) in generated.value().iter().zip(generated.mask().iter()) {
+            assert_eq!(value & !mask, 0);
+        }
+    }
+
+    #[test]
+    fn generate_with_mask_preserves_explicit_mask() {
+        let mask = vec![0xff, 0x00, 0xf0, 0x0f];
+        let generated = generate_with_mask(mask.clone()).unwrap();
+
+        assert_eq!(generated.mask(), mask);
+        assert_eq!(generated.value()[1], 0);
+    }
+
+    #[test]
+    fn generate_with_mask_rejects_empty_mask() {
+        let err = generate_with_mask(Vec::new()).unwrap_err();
+
+        assert_eq!(err, Error::EmptyMask);
+    }
+
+    #[test]
+    fn generated_prefix_formats_as_value_and_mask() {
+        let generated = GeneratedPrefix::new(vec![0xab, 0xcd], vec![0xff, 0xf0]).unwrap();
+
+        assert_eq!(generated.to_masked_hex_string(), "abcd/fff0");
+    }
+}
