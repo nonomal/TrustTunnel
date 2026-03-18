@@ -5,6 +5,7 @@ extern crate macros;
 
 pub mod authentication;
 pub mod cert_verification;
+pub mod client_random_prefix;
 pub mod client_config;
 pub mod core;
 pub mod log_utils;
