@@ -785,4 +785,63 @@ mod tests {
             "[2001:db8::1]:443"
         );
     }
+
+    #[test]
+    fn test_extract_rules_file_path_resolves_relative_to_settings_file() {
+        let settings_dir = std::env::temp_dir().join("trusttunnel_settings_dir_relative");
+        std::fs::create_dir_all(&settings_dir).unwrap();
+        let settings_path = settings_dir.join("vpn.toml");
+        let settings_contents = r#"rules_file = "rules.toml""#;
+
+        let rules_path = extract_rules_file_path(settings_contents, settings_path.to_str().unwrap())
+            .unwrap();
+
+        assert_eq!(rules_path, settings_dir.join("rules.toml"));
+    }
+
+    #[test]
+    fn test_extract_rules_file_path_keeps_absolute_path() {
+        let absolute_rules = std::env::temp_dir().join("trusttunnel_absolute_rules.toml");
+        let settings_path = std::env::temp_dir().join("trusttunnel_settings.toml");
+        let settings_contents = format!("rules_file = \"{}\"", absolute_rules.display());
+
+        let rules_path = extract_rules_file_path(&settings_contents, settings_path.to_str().unwrap())
+            .unwrap();
+
+        assert_eq!(rules_path, absolute_rules);
+    }
+
+    #[test]
+    fn test_extract_rules_file_path_returns_none_without_rules_file() {
+        assert!(extract_rules_file_path("listen_address = \"127.0.0.1:443\"", "vpn.toml").is_none());
+    }
+
+    #[test]
+    fn test_append_allow_rule_creates_new_rule() {
+        let rules_path = std::env::temp_dir().join("trusttunnel_append_allow_rule_create.toml");
+        let _ = std::fs::remove_file(&rules_path);
+
+        append_allow_rule(&rules_path, "abcd/fff0").unwrap();
+
+        let contents = std::fs::read_to_string(&rules_path).unwrap();
+        assert_eq!(
+            contents,
+            "[[rule]]\nclient_random_prefix = \"abcd/fff0\"\naction = \"allow\"\n"
+        );
+
+        let _ = std::fs::remove_file(&rules_path);
+    }
+
+    #[test]
+    fn test_append_allow_rule_appends_after_existing_content() {
+        let rules_path = std::env::temp_dir().join("trusttunnel_append_allow_rule_append.toml");
+        std::fs::write(&rules_path, "[[rule]]\naction = \"deny\"\n").unwrap();
+
+        append_allow_rule(&rules_path, "1234/ff00").unwrap();
+
+        let contents = std::fs::read_to_string(&rules_path).unwrap();
+        assert!(contents.contains("[[rule]]\naction = \"deny\"\n\n[[rule]]\nclient_random_prefix = \"1234/ff00\"\naction = \"allow\"\n"));
+
+        let _ = std::fs::remove_file(&rules_path);
+    }
 }
