@@ -19,7 +19,11 @@ impl std::fmt::Display for Error {
                 write!(f, "percent must be in range 1..=100, got {}", percent)
             }
             Self::MaskTooLong(length) => {
-                write!(f, "mask length must be in range 1..=32 bytes, got {}", length)
+                write!(
+                    f,
+                    "mask length must be in range 1..=32 bytes, got {}",
+                    length
+                )
             }
         }
     }

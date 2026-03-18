@@ -8,8 +8,8 @@ use std::sync::Arc;
 use tokio::signal;
 use trusttunnel::authentication::registry_based::RegistryBasedAuthenticator;
 use trusttunnel::authentication::Authenticator;
-use trusttunnel::client_random_prefix::{self, GeneratorParams};
 use trusttunnel::client_config;
+use trusttunnel::client_random_prefix::{self, GeneratorParams};
 use trusttunnel::core::Core;
 use trusttunnel::settings::Settings;
 use trusttunnel::shutdown::Shutdown;
@@ -218,8 +218,10 @@ fn main() {
     increase_fd_limit();
 
     let settings_path = args.get_one::<String>(SETTINGS_PARAM_NAME).unwrap();
-    let settings_contents = std::fs::read_to_string(settings_path).expect("Couldn't read the settings file");
-    let settings: Settings = toml::from_str(&settings_contents).expect("Couldn't parse the settings file");
+    let settings_contents =
+        std::fs::read_to_string(settings_path).expect("Couldn't read the settings file");
+    let settings: Settings =
+        toml::from_str(&settings_contents).expect("Couldn't parse the settings file");
 
     if settings.get_clients().is_empty() && settings.get_listen_address().ip().is_loopback() {
         warn!(
@@ -277,23 +279,24 @@ fn main() {
         let generated_client_random_prefix = if args
             .get_flag(GENERATE_CLIENT_RANDOM_PREFIX_PARAM_NAME)
         {
-            let generated = if let Some(mask_hex) = args.get_one::<String>(PREFIX_MASK_PARAM_NAME) {
-                let mask = hex::decode(mask_hex).unwrap_or_else(|_| {
-                    eprintln!("Error: prefix_mask '{}' is not valid hex", mask_hex);
+            let generated =
+                if let Some(mask_hex) = args.get_one::<String>(PREFIX_MASK_PARAM_NAME) {
+                    let mask = hex::decode(mask_hex).unwrap_or_else(|_| {
+                        eprintln!("Error: prefix_mask '{}' is not valid hex", mask_hex);
+                        std::process::exit(1);
+                    });
+
+                    client_random_prefix::generate_with_mask(mask)
+                } else {
+                    client_random_prefix::generate(GeneratorParams {
+                        length: *args.get_one::<usize>(PREFIX_LENGTH_PARAM_NAME).unwrap(),
+                        percent: *args.get_one::<u8>(PREFIX_PERCENT_PARAM_NAME).unwrap(),
+                    })
+                }
+                .unwrap_or_else(|err| {
+                    eprintln!("Error: {}", err);
                     std::process::exit(1);
                 });
-
-                client_random_prefix::generate_with_mask(mask)
-            } else {
-                client_random_prefix::generate(GeneratorParams {
-                    length: *args.get_one::<usize>(PREFIX_LENGTH_PARAM_NAME).unwrap(),
-                    percent: *args.get_one::<u8>(PREFIX_PERCENT_PARAM_NAME).unwrap(),
-                })
-            }
-            .unwrap_or_else(|err| {
-                eprintln!("Error: {}", err);
-                std::process::exit(1);
-            });
 
             let generated_prefix = generated.to_masked_hex_string();
             let rules_path = extract_rules_file_path(&settings_contents, settings_path).unwrap_or_else(|| {
@@ -352,49 +355,49 @@ fn main() {
             // Validate against rules.toml
             if generated_client_random_prefix.is_none() {
                 if let Some(rules_engine) = settings.get_rules_engine() {
-                let input_mask: Option<&str> = if input_mask.is_empty() {
-                    None
-                } else {
-                    Some(input_mask)
-                };
+                    let input_mask: Option<&str> = if input_mask.is_empty() {
+                        None
+                    } else {
+                        Some(input_mask)
+                    };
 
-                let matching_rule = rules_engine.config().rule.iter().find(|rule| {
-                    rule.client_random_prefix
-                        .as_ref()
-                        .map(|p| {
-                            let (rule_prefix, rule_mask): (&str, Option<&str>) = p
-                                .split_once('/')
-                                .map(|(a, b)| (a, Some(b)))
-                                .unwrap_or((p.as_str(), None));
+                    let matching_rule = rules_engine.config().rule.iter().find(|rule| {
+                        rule.client_random_prefix
+                            .as_ref()
+                            .map(|p| {
+                                let (rule_prefix, rule_mask): (&str, Option<&str>) = p
+                                    .split_once('/')
+                                    .map(|(a, b)| (a, Some(b)))
+                                    .unwrap_or((p.as_str(), None));
 
-                            // Prefix parts must be equal
-                            if rule_prefix != input_prefix {
-                                return false;
-                            }
+                                // Prefix parts must be equal
+                                if rule_prefix != input_prefix {
+                                    return false;
+                                }
 
-                            // Mask compatibility: input mask must be same or stronger than rule mask.
-                            // "Stronger" means more bits set, i.e. (input_mask & rule_mask) == rule_mask.
-                            match (input_mask, rule_mask) {
-                                // Rule has no mask, any input mask is at least as strong
-                                (_, None) => true,
-                                // Input has no mask, strongest possible
-                                (None, Some(_)) => true,
-                                // Both have masks, input mask must cover all bits of rule mask
-                                (Some(mi_str), Some(mr_str)) => {
-                                    match (hex::decode(mi_str), hex::decode(mr_str)) {
-                                        (Ok(mi), Ok(mr)) => {
-                                            mi.len() >= mr.len()
-                                                && (0..mr.len()).all(|i| mi[i] & mr[i] == mr[i])
+                                // Mask compatibility: input mask must be same or stronger than rule mask.
+                                // "Stronger" means more bits set, i.e. (input_mask & rule_mask) == rule_mask.
+                                match (input_mask, rule_mask) {
+                                    // Rule has no mask, any input mask is at least as strong
+                                    (_, None) => true,
+                                    // Input has no mask, strongest possible
+                                    (None, Some(_)) => true,
+                                    // Both have masks, input mask must cover all bits of rule mask
+                                    (Some(mi_str), Some(mr_str)) => {
+                                        match (hex::decode(mi_str), hex::decode(mr_str)) {
+                                            (Ok(mi), Ok(mr)) => {
+                                                mi.len() >= mr.len()
+                                                    && (0..mr.len()).all(|i| mi[i] & mr[i] == mr[i])
+                                            }
+                                            _ => false,
                                         }
-                                        _ => false,
                                     }
                                 }
-                            }
-                        })
-                        .unwrap_or(false)
-                });
+                            })
+                            .unwrap_or(false)
+                    });
 
-                // Print warning and continue, do not panic because it's optional field
+                    // Print warning and continue, do not panic because it's optional field
                     match matching_rule {
                         None => {
                             eprintln!(
@@ -597,7 +600,9 @@ fn extract_rules_file_path(settings_contents: &str, settings_path: &str) -> Opti
         return Some(path.to_path_buf());
     }
 
-    let settings_dir = Path::new(settings_path).parent().unwrap_or_else(|| Path::new("."));
+    let settings_dir = Path::new(settings_path)
+        .parent()
+        .unwrap_or_else(|| Path::new("."));
     Some(settings_dir.join(path))
 }
 
@@ -793,8 +798,8 @@ mod tests {
         let settings_path = settings_dir.join("vpn.toml");
         let settings_contents = r#"rules_file = "rules.toml""#;
 
-        let rules_path = extract_rules_file_path(settings_contents, settings_path.to_str().unwrap())
-            .unwrap();
+        let rules_path =
+            extract_rules_file_path(settings_contents, settings_path.to_str().unwrap()).unwrap();
 
         assert_eq!(rules_path, settings_dir.join("rules.toml"));
     }
@@ -805,15 +810,17 @@ mod tests {
         let settings_path = std::env::temp_dir().join("trusttunnel_settings.toml");
         let settings_contents = format!("rules_file = \"{}\"", absolute_rules.display());
 
-        let rules_path = extract_rules_file_path(&settings_contents, settings_path.to_str().unwrap())
-            .unwrap();
+        let rules_path =
+            extract_rules_file_path(&settings_contents, settings_path.to_str().unwrap()).unwrap();
 
         assert_eq!(rules_path, absolute_rules);
     }
 
     #[test]
     fn test_extract_rules_file_path_returns_none_without_rules_file() {
-        assert!(extract_rules_file_path("listen_address = \"127.0.0.1:443\"", "vpn.toml").is_none());
+        assert!(
+            extract_rules_file_path("listen_address = \"127.0.0.1:443\"", "vpn.toml").is_none()
+        );
     }
 
     #[test]
