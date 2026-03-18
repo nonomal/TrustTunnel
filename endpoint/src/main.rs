@@ -1,10 +1,14 @@
 use log::{debug, error, info, warn, LevelFilter};
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::signal;
 use trusttunnel::authentication::registry_based::RegistryBasedAuthenticator;
 use trusttunnel::authentication::Authenticator;
+use trusttunnel::client_random_prefix::{self, GeneratorParams};
 use trusttunnel::client_config;
 use trusttunnel::core::Core;
 use trusttunnel::settings::Settings;
@@ -214,10 +218,8 @@ fn main() {
     increase_fd_limit();
 
     let settings_path = args.get_one::<String>(SETTINGS_PARAM_NAME).unwrap();
-    let settings: Settings = toml::from_str(
-        &std::fs::read_to_string(settings_path).expect("Couldn't read the settings file"),
-    )
-    .expect("Couldn't parse the settings file");
+    let settings_contents = std::fs::read_to_string(settings_path).expect("Couldn't read the settings file");
+    let settings: Settings = toml::from_str(&settings_contents).expect("Couldn't parse the settings file");
 
     if settings.get_clients().is_empty() && settings.get_listen_address().ip().is_loopback() {
         warn!(
@@ -272,9 +274,61 @@ fn main() {
             }
         }
 
+        let generated_client_random_prefix = if args
+            .get_flag(GENERATE_CLIENT_RANDOM_PREFIX_PARAM_NAME)
+        {
+            let generated = if let Some(mask_hex) = args.get_one::<String>(PREFIX_MASK_PARAM_NAME) {
+                let mask = hex::decode(mask_hex).unwrap_or_else(|_| {
+                    eprintln!("Error: prefix_mask '{}' is not valid hex", mask_hex);
+                    std::process::exit(1);
+                });
+
+                client_random_prefix::generate_with_mask(mask)
+            } else {
+                client_random_prefix::generate(GeneratorParams {
+                    length: *args.get_one::<usize>(PREFIX_LENGTH_PARAM_NAME).unwrap(),
+                    percent: *args.get_one::<u8>(PREFIX_PERCENT_PARAM_NAME).unwrap(),
+                })
+            }
+            .unwrap_or_else(|err| {
+                eprintln!("Error: {}", err);
+                std::process::exit(1);
+            });
+
+            let generated_prefix = generated.to_masked_hex_string();
+            let rules_path = extract_rules_file_path(&settings_contents, settings_path).unwrap_or_else(|| {
+                eprintln!(
+                    "Error: rules_file must be configured in settings to generate client_random_prefix"
+                );
+                std::process::exit(1);
+            });
+
+            append_allow_rule(&rules_path, &generated_prefix).unwrap_or_else(|err| {
+                eprintln!(
+                    "Error: failed to append generated client_random_prefix to '{}': {}",
+                    rules_path.display(),
+                    err
+                );
+                std::process::exit(1);
+            });
+
+            eprintln!(
+                "Added allow rule to '{}': {}",
+                rules_path.display(),
+                generated_prefix
+            );
+
+            Some(generated_prefix)
+        } else {
+            None
+        };
+
         let mut client_random_prefix = args
             .get_one::<String>(CLIENT_RANDOM_PREFIX_PARAM_NAME)
             .cloned();
+        if let Some(generated_prefix) = generated_client_random_prefix.as_ref() {
+            client_random_prefix = Some(generated_prefix.clone());
+        }
         if let Some(ref prefix) = client_random_prefix {
             let has_slash = prefix.contains('/');
             let (input_prefix, input_mask) = prefix.split_once('/').unwrap_or((prefix, ""));
@@ -296,7 +350,8 @@ fn main() {
             }
 
             // Validate against rules.toml
-            if let Some(rules_engine) = settings.get_rules_engine() {
+            if generated_client_random_prefix.is_none() {
+                if let Some(rules_engine) = settings.get_rules_engine() {
                 let input_mask: Option<&str> = if input_mask.is_empty() {
                     None
                 } else {
@@ -340,21 +395,22 @@ fn main() {
                 });
 
                 // Print warning and continue, do not panic because it's optional field
-                match matching_rule {
-                    None => {
-                        eprintln!(
-                            "Warning: No rule found in rules.toml matching client_random_prefix '{}'. This field will be ignored.",
-                            prefix
-                        );
-                        client_random_prefix = None;
+                    match matching_rule {
+                        None => {
+                            eprintln!(
+                                "Warning: No rule found in rules.toml matching client_random_prefix '{}'. This field will be ignored.",
+                                prefix
+                            );
+                            client_random_prefix = None;
+                        }
+                        Some(rule) if rule.action == trusttunnel::rules::RuleAction::Deny => {
+                            eprintln!(
+                                "Warning: Matched rule in rules.toml for client_random_prefix '{}' has action 'deny'.",
+                                prefix
+                            );
+                        }
+                        Some(_) => {}
                     }
-                    Some(rule) if rule.action == trusttunnel::rules::RuleAction::Deny => {
-                        eprintln!(
-                            "Warning: Matched rule in rules.toml for client_random_prefix '{}' has action 'deny'.",
-                            prefix
-                        );
-                    }
-                    Some(_) => {}
                 }
             }
         }
@@ -511,6 +567,38 @@ fn domain_matches_tls_hosts(domain: &str, tls_hosts_settings: &settings::TlsHost
         .get_main_hosts()
         .iter()
         .any(|h| h.hostname == domain || h.allowed_sni.iter().any(|s| s == domain))
+}
+
+fn append_allow_rule(rules_path: &Path, client_random_prefix: &str) -> std::io::Result<()> {
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(rules_path)?;
+
+    let existing = std::fs::metadata(rules_path)
+        .map(|metadata| metadata.len())
+        .unwrap_or_default();
+    if existing > 0 {
+        writeln!(file)?;
+    }
+    writeln!(file, "[[rule]]")?;
+    writeln!(file, "client_random_prefix = \"{}\"", client_random_prefix)?;
+    writeln!(file, "action = \"allow\"")?;
+
+    Ok(())
+}
+
+fn extract_rules_file_path(settings_contents: &str, settings_path: &str) -> Option<PathBuf> {
+    let value = settings_contents.parse::<toml::Value>().ok()?;
+    let rules_file = value.get("rules_file")?.as_str()?;
+    let path = Path::new(rules_file);
+
+    if path.is_absolute() {
+        return Some(path.to_path_buf());
+    }
+
+    let settings_dir = Path::new(settings_path).parent().unwrap_or_else(|| Path::new("."));
+    Some(settings_dir.join(path))
 }
 
 /// Parse an endpoint address string into a normalized `host:port` format.
