@@ -21,6 +21,10 @@ const CLIENT_CONFIG_PARAM_NAME: &str = "client_config";
 const ADDRESS_PARAM_NAME: &str = "address";
 const CUSTOM_SNI_PARAM_NAME: &str = "custom_sni";
 const CLIENT_RANDOM_PREFIX_PARAM_NAME: &str = "client_random_prefix";
+const GENERATE_CLIENT_RANDOM_PREFIX_PARAM_NAME: &str = "generate_client_random_prefix";
+const PREFIX_LENGTH_PARAM_NAME: &str = "prefix_length";
+const PREFIX_PERCENT_PARAM_NAME: &str = "prefix_percent";
+const PREFIX_MASK_PARAM_NAME: &str = "prefix_mask";
 const FORMAT_PARAM_NAME: &str = "format";
 const SENTRY_DSN_PARAM_NAME: &str = "sentry_dsn";
 const THREADS_NUM_PARAM_NAME: &str = "threads_num";
@@ -129,6 +133,32 @@ fn main() {
                 .short('r')
                 .long("client-random-prefix")
                 .help("TLS client random hex prefix for connection filtering. Must have a corresponding rule in rules.toml."),
+            clap::Arg::new(GENERATE_CLIENT_RANDOM_PREFIX_PARAM_NAME)
+                .action(clap::ArgAction::SetTrue)
+                .requires(CLIENT_CONFIG_PARAM_NAME)
+                .long("generate-client-random-prefix")
+                .conflicts_with(CLIENT_RANDOM_PREFIX_PARAM_NAME)
+                .help("Generate a new TLS client random prefix for connection filtering and use it in the exported client config."),
+            clap::Arg::new(PREFIX_LENGTH_PARAM_NAME)
+                .action(clap::ArgAction::Set)
+                .requires(GENERATE_CLIENT_RANDOM_PREFIX_PARAM_NAME)
+                .long("prefix-length")
+                .value_parser(clap::value_parser!(usize))
+                .default_value("4")
+                .help("Generated client random prefix length in bytes."),
+            clap::Arg::new(PREFIX_PERCENT_PARAM_NAME)
+                .action(clap::ArgAction::Set)
+                .requires(GENERATE_CLIENT_RANDOM_PREFIX_PARAM_NAME)
+                .long("prefix-percent")
+                .value_parser(clap::value_parser!(u8))
+                .default_value("70")
+                .help("Percentage of one bits in the generated client random mask."),
+            clap::Arg::new(PREFIX_MASK_PARAM_NAME)
+                .action(clap::ArgAction::Set)
+                .requires(GENERATE_CLIENT_RANDOM_PREFIX_PARAM_NAME)
+                .long("prefix-mask")
+                .conflicts_with_all([PREFIX_LENGTH_PARAM_NAME, PREFIX_PERCENT_PARAM_NAME])
+                .help("Explicit mask for generated client random prefix in hex format."),
             clap::Arg::new(FORMAT_PARAM_NAME)
                 .action(clap::ArgAction::Set)
                 .requires(CLIENT_CONFIG_PARAM_NAME)
