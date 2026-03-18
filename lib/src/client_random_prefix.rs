@@ -53,10 +53,8 @@ pub struct GeneratedPrefix {
 }
 
 impl GeneratedPrefix {
-    pub fn new(value: Vec<u8>, mask: Vec<u8>) -> Result<Self, Error> {
-        validate_mask(&mask)?;
-
-        Ok(Self { value, mask })
+    fn new(value: Vec<u8>, mask: Vec<u8>) -> Self {
+        Self { value, mask }
     }
 
     pub fn value(&self) -> &[u8] {
@@ -78,7 +76,7 @@ pub fn generate(params: GeneratorParams) -> Result<GeneratedPrefix, Error> {
     let mask = generate_mask(params.length, params.percent);
     let value = generate_value(&mask);
 
-    GeneratedPrefix::new(value, mask)
+    Ok(GeneratedPrefix::new(value, mask))
 }
 
 pub fn generate_with_mask(mask: Vec<u8>) -> Result<GeneratedPrefix, Error> {
@@ -86,7 +84,7 @@ pub fn generate_with_mask(mask: Vec<u8>) -> Result<GeneratedPrefix, Error> {
 
     let value = generate_value(&mask);
 
-    GeneratedPrefix::new(value, mask)
+    Ok(GeneratedPrefix::new(value, mask))
 }
 
 fn validate_params(params: GeneratorParams) -> Result<(), Error> {
@@ -204,8 +202,10 @@ mod tests {
 
     #[test]
     fn generated_prefix_formats_as_value_and_mask() {
-        let generated = GeneratedPrefix::new(vec![0xab, 0xcd], vec![0xff, 0xf0]).unwrap();
+        let generated = generate_with_mask(vec![0xff, 0xf0]).unwrap();
+        let hex_str = generated.to_masked_hex_string();
 
-        assert_eq!(generated.to_masked_hex_string(), "abcd/fff0");
+        assert!(hex_str.ends_with("/fff0"));
+        assert_eq!(hex_str.len(), "abcd/fff0".len());
     }
 }

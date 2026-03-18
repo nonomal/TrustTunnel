@@ -326,12 +326,10 @@ fn main() {
             None
         };
 
-        let mut client_random_prefix = args
-            .get_one::<String>(CLIENT_RANDOM_PREFIX_PARAM_NAME)
-            .cloned();
-        if let Some(generated_prefix) = generated_client_random_prefix.as_ref() {
-            client_random_prefix = Some(generated_prefix.clone());
-        }
+        let mut client_random_prefix = generated_client_random_prefix.or_else(|| {
+            args.get_one::<String>(CLIENT_RANDOM_PREFIX_PARAM_NAME)
+                .cloned()
+        });
         if let Some(ref prefix) = client_random_prefix {
             let has_slash = prefix.contains('/');
             let (input_prefix, input_mask) = prefix.split_once('/').unwrap_or((prefix, ""));
@@ -353,67 +351,65 @@ fn main() {
             }
 
             // Validate against rules.toml
-            if generated_client_random_prefix.is_none() {
-                if let Some(rules_engine) = settings.get_rules_engine() {
-                    let input_mask: Option<&str> = if input_mask.is_empty() {
-                        None
-                    } else {
-                        Some(input_mask)
-                    };
+            if let Some(rules_engine) = settings.get_rules_engine() {
+                let input_mask: Option<&str> = if input_mask.is_empty() {
+                    None
+                } else {
+                    Some(input_mask)
+                };
 
-                    let matching_rule = rules_engine.config().rule.iter().find(|rule| {
-                        rule.client_random_prefix
-                            .as_ref()
-                            .map(|p| {
-                                let (rule_prefix, rule_mask): (&str, Option<&str>) = p
-                                    .split_once('/')
-                                    .map(|(a, b)| (a, Some(b)))
-                                    .unwrap_or((p.as_str(), None));
+                let matching_rule = rules_engine.config().rule.iter().find(|rule| {
+                    rule.client_random_prefix
+                        .as_ref()
+                        .map(|p| {
+                            let (rule_prefix, rule_mask): (&str, Option<&str>) = p
+                                .split_once('/')
+                                .map(|(a, b)| (a, Some(b)))
+                                .unwrap_or((p.as_str(), None));
 
-                                // Prefix parts must be equal
-                                if rule_prefix != input_prefix {
-                                    return false;
-                                }
+                            // Prefix parts must be equal
+                            if rule_prefix != input_prefix {
+                                return false;
+                            }
 
-                                // Mask compatibility: input mask must be same or stronger than rule mask.
-                                // "Stronger" means more bits set, i.e. (input_mask & rule_mask) == rule_mask.
-                                match (input_mask, rule_mask) {
-                                    // Rule has no mask, any input mask is at least as strong
-                                    (_, None) => true,
-                                    // Input has no mask, strongest possible
-                                    (None, Some(_)) => true,
-                                    // Both have masks, input mask must cover all bits of rule mask
-                                    (Some(mi_str), Some(mr_str)) => {
-                                        match (hex::decode(mi_str), hex::decode(mr_str)) {
-                                            (Ok(mi), Ok(mr)) => {
-                                                mi.len() >= mr.len()
-                                                    && (0..mr.len()).all(|i| mi[i] & mr[i] == mr[i])
-                                            }
-                                            _ => false,
+                            // Mask compatibility: input mask must be same or stronger than rule mask.
+                            // "Stronger" means more bits set, i.e. (input_mask & rule_mask) == rule_mask.
+                            match (input_mask, rule_mask) {
+                                // Rule has no mask, any input mask is at least as strong
+                                (_, None) => true,
+                                // Input has no mask, strongest possible
+                                (None, Some(_)) => true,
+                                // Both have masks, input mask must cover all bits of rule mask
+                                (Some(mi_str), Some(mr_str)) => {
+                                    match (hex::decode(mi_str), hex::decode(mr_str)) {
+                                        (Ok(mi), Ok(mr)) => {
+                                            mi.len() >= mr.len()
+                                                && (0..mr.len()).all(|i| mi[i] & mr[i] == mr[i])
                                         }
+                                        _ => false,
                                     }
                                 }
-                            })
-                            .unwrap_or(false)
-                    });
+                            }
+                        })
+                        .unwrap_or(false)
+                });
 
-                    // Print warning and continue, do not panic because it's optional field
-                    match matching_rule {
-                        None => {
-                            eprintln!(
-                                "Warning: No rule found in rules.toml matching client_random_prefix '{}'. This field will be ignored.",
-                                prefix
-                            );
-                            client_random_prefix = None;
-                        }
-                        Some(rule) if rule.action == trusttunnel::rules::RuleAction::Deny => {
-                            eprintln!(
-                                "Warning: Matched rule in rules.toml for client_random_prefix '{}' has action 'deny'.",
-                                prefix
-                            );
-                        }
-                        Some(_) => {}
+                // Print warning and continue, do not panic because it's optional field
+                match matching_rule {
+                    None => {
+                        eprintln!(
+                            "Warning: No rule found in rules.toml matching client_random_prefix '{}'. This field will be ignored.",
+                            prefix
+                        );
+                        client_random_prefix = None;
                     }
+                    Some(rule) if rule.action == trusttunnel::rules::RuleAction::Deny => {
+                        eprintln!(
+                            "Warning: Matched rule in rules.toml for client_random_prefix '{}' has action 'deny'.",
+                            prefix
+                        );
+                    }
+                    Some(_) => {}
                 }
             }
         }
@@ -578,10 +574,7 @@ fn append_allow_rule(rules_path: &Path, client_random_prefix: &str) -> std::io::
         .append(true)
         .open(rules_path)?;
 
-    let existing = std::fs::metadata(rules_path)
-        .map(|metadata| metadata.len())
-        .unwrap_or_default();
-    if existing > 0 {
+    if file.metadata()?.len() > 0 {
         writeln!(file)?;
     }
     writeln!(file, "[[rule]]")?;
