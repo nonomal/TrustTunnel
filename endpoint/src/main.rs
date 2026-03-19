@@ -588,28 +588,11 @@ fn append_allow_rule(rules_path: &Path, client_random_prefix: &str) -> std::io::
             std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid rules format")
         })?;
 
-    let catchall_pos = rules.iter().position(|rule| {
-        rule.get("cidr").is_none()
-            && rule.get("client_random_prefix").is_none()
-            && rule.get("action").and_then(|v| v.as_str()) == Some("deny")
-    });
-
-    match catchall_pos {
-        Some(pos) => {
-            let tail: Vec<Table> = (pos..rules.len())
-                .map(|i| rules.get(i).unwrap().clone())
-                .collect();
-            while rules.len() > pos {
-                rules.remove(rules.len() - 1);
-            }
-            rules.push(new_rule);
-            for table in tail {
-                rules.push(table);
-            }
-        }
-        None => {
-            rules.push(new_rule);
-        }
+    let tail: Vec<Table> = rules.iter().cloned().collect();
+    rules.clear();
+    rules.push(new_rule);
+    for table in tail {
+        rules.push(table);
     }
 
     std::fs::write(rules_path, doc.to_string())
@@ -900,7 +883,7 @@ mod tests {
     }
 
     #[test]
-    fn test_append_allow_rule_does_not_treat_specific_deny_as_catchall() {
+    fn test_append_allow_rule_inserts_before_specific_deny() {
         let rules_path =
             std::env::temp_dir().join("trusttunnel_append_allow_rule_specific_deny.toml");
         std::fs::write(
@@ -915,8 +898,8 @@ mod tests {
         let allow_pos = contents.find("client_random_prefix").unwrap();
         let deny_pos = contents.find("action = \"deny\"").unwrap();
         assert!(
-            allow_pos > deny_pos,
-            "allow rule should appear after specific deny (not catch-all)"
+            allow_pos < deny_pos,
+            "allow rule should appear before any existing rule"
         );
 
         let _ = std::fs::remove_file(&rules_path);
