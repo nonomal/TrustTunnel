@@ -1,3 +1,4 @@
+use rand::rngs::OsRng;
 use rand::Rng;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -128,10 +129,9 @@ fn generate_mask(length: usize, percent: u8) -> Vec<u8> {
 
 fn generate_value(mask: &[u8]) -> Vec<u8> {
     let mut value = vec![0u8; mask.len()];
-    let mut rng = rand::thread_rng();
 
     for (byte, mask_byte) in value.iter_mut().zip(mask.iter().copied()) {
-        *byte = rng.gen::<u8>() & mask_byte;
+        *byte = OsRng.gen::<u8>() & mask_byte;
     }
 
     value
