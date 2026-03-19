@@ -1,11 +1,10 @@
 use log::{debug, error, info, warn, LevelFilter};
-use std::fs::OpenOptions;
-use std::io::Write;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::signal;
+use toml_edit::{Document, Item, Table};
 use trusttunnel::authentication::registry_based::RegistryBasedAuthenticator;
 use trusttunnel::authentication::Authenticator;
 use trusttunnel::client_config;
@@ -569,19 +568,51 @@ fn domain_matches_tls_hosts(domain: &str, tls_hosts_settings: &settings::TlsHost
 }
 
 fn append_allow_rule(rules_path: &Path, client_random_prefix: &str) -> std::io::Result<()> {
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(rules_path)?;
+    let content = std::fs::read_to_string(rules_path).unwrap_or_default();
+    let mut doc: Document = content
+        .parse()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
-    if file.metadata()?.len() > 0 {
-        writeln!(file)?;
+    let mut new_rule = Table::new();
+    new_rule.insert(
+        "client_random_prefix",
+        toml_edit::value(client_random_prefix),
+    );
+    new_rule.insert("action", toml_edit::value("allow"));
+
+    let rules = doc
+        .entry("rule")
+        .or_insert(Item::ArrayOfTables(Default::default()))
+        .as_array_of_tables_mut()
+        .ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid rules format")
+        })?;
+
+    let catchall_pos = rules.iter().position(|rule| {
+        rule.get("cidr").is_none()
+            && rule.get("client_random_prefix").is_none()
+            && rule.get("action").and_then(|v| v.as_str()) == Some("deny")
+    });
+
+    match catchall_pos {
+        Some(pos) => {
+            let tail: Vec<Table> = (pos..rules.len())
+                .map(|i| rules.get(i).unwrap().clone())
+                .collect();
+            while rules.len() > pos {
+                rules.remove(rules.len() - 1);
+            }
+            rules.push(new_rule);
+            for table in tail {
+                rules.push(table);
+            }
+        }
+        None => {
+            rules.push(new_rule);
+        }
     }
-    writeln!(file, "[[rule]]")?;
-    writeln!(file, "client_random_prefix = \"{}\"", client_random_prefix)?;
-    writeln!(file, "action = \"allow\"")?;
 
-    Ok(())
+    std::fs::write(rules_path, doc.to_string())
 }
 
 fn extract_rules_file_path(settings_contents: &str, settings_path: &str) -> Option<PathBuf> {
@@ -824,23 +855,69 @@ mod tests {
         append_allow_rule(&rules_path, "abcd/fff0").unwrap();
 
         let contents = std::fs::read_to_string(&rules_path).unwrap();
-        assert_eq!(
-            contents,
-            "[[rule]]\nclient_random_prefix = \"abcd/fff0\"\naction = \"allow\"\n"
+        assert!(contents.contains("[[rule]]"));
+        assert!(contents.contains("client_random_prefix = \"abcd/fff0\""));
+        assert!(contents.contains("action = \"allow\""));
+
+        let _ = std::fs::remove_file(&rules_path);
+    }
+
+    #[test]
+    fn test_append_allow_rule_appends_after_existing_allow() {
+        let rules_path = std::env::temp_dir().join("trusttunnel_append_allow_rule_append.toml");
+        std::fs::write(
+            &rules_path,
+            "[[rule]]\ncidr = \"10.0.0.0/8\"\naction = \"allow\"\n",
+        )
+        .unwrap();
+
+        append_allow_rule(&rules_path, "1234/ff00").unwrap();
+
+        let contents = std::fs::read_to_string(&rules_path).unwrap();
+        assert!(contents.contains("cidr = \"10.0.0.0/8\""));
+        assert!(contents.contains("client_random_prefix = \"1234/ff00\""));
+
+        let _ = std::fs::remove_file(&rules_path);
+    }
+
+    #[test]
+    fn test_append_allow_rule_inserts_before_catchall_deny() {
+        let rules_path =
+            std::env::temp_dir().join("trusttunnel_append_allow_rule_before_catchall.toml");
+        std::fs::write(&rules_path, "[[rule]]\naction = \"deny\"\n").unwrap();
+
+        append_allow_rule(&rules_path, "abcd/fff0").unwrap();
+
+        let contents = std::fs::read_to_string(&rules_path).unwrap();
+        let allow_pos = contents.find("client_random_prefix").unwrap();
+        let deny_pos = contents.find("action = \"deny\"").unwrap();
+        assert!(
+            allow_pos < deny_pos,
+            "allow rule should appear before catch-all deny"
         );
 
         let _ = std::fs::remove_file(&rules_path);
     }
 
     #[test]
-    fn test_append_allow_rule_appends_after_existing_content() {
-        let rules_path = std::env::temp_dir().join("trusttunnel_append_allow_rule_append.toml");
-        std::fs::write(&rules_path, "[[rule]]\naction = \"deny\"\n").unwrap();
+    fn test_append_allow_rule_does_not_treat_specific_deny_as_catchall() {
+        let rules_path =
+            std::env::temp_dir().join("trusttunnel_append_allow_rule_specific_deny.toml");
+        std::fs::write(
+            &rules_path,
+            "[[rule]]\ncidr = \"192.168.0.0/16\"\naction = \"deny\"\n",
+        )
+        .unwrap();
 
-        append_allow_rule(&rules_path, "1234/ff00").unwrap();
+        append_allow_rule(&rules_path, "abcd/fff0").unwrap();
 
         let contents = std::fs::read_to_string(&rules_path).unwrap();
-        assert!(contents.contains("[[rule]]\naction = \"deny\"\n\n[[rule]]\nclient_random_prefix = \"1234/ff00\"\naction = \"allow\"\n"));
+        let allow_pos = contents.find("client_random_prefix").unwrap();
+        let deny_pos = contents.find("action = \"deny\"").unwrap();
+        assert!(
+            allow_pos > deny_pos,
+            "allow rule should appear after specific deny (not catch-all)"
+        );
 
         let _ = std::fs::remove_file(&rules_path);
     }

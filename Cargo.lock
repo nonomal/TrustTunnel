@@ -3591,6 +3591,7 @@ dependencies = [
  "sentry",
  "tokio",
  "toml",
+ "toml_edit 0.19.15",
  "trusttunnel",
 ]
 
