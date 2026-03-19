@@ -325,90 +325,95 @@ fn main() {
             None
         };
 
+        let is_generated = generated_client_random_prefix.is_some();
         let mut client_random_prefix = generated_client_random_prefix.or_else(|| {
             args.get_one::<String>(CLIENT_RANDOM_PREFIX_PARAM_NAME)
                 .cloned()
         });
-        if let Some(ref prefix) = client_random_prefix {
-            let has_slash = prefix.contains('/');
-            let (input_prefix, input_mask) = prefix.split_once('/').unwrap_or((prefix, ""));
 
-            // Validate hex format
-            if hex::decode(input_prefix).is_err() {
-                eprintln!("Error: client_random_prefix '{}' is not valid hex", prefix);
-                std::process::exit(1);
-            }
+        // Validate explicit --client-random-prefix (skip for generated prefix)
+        if !is_generated {
+            if let Some(ref prefix) = client_random_prefix {
+                let has_slash = prefix.contains('/');
+                let (input_prefix, input_mask) = prefix.split_once('/').unwrap_or((prefix, ""));
 
-            if (has_slash && input_mask.is_empty())
-                || (!input_mask.is_empty() && hex::decode(input_mask).is_err())
-            {
-                eprintln!(
-                    "Error: client_random_prefix mask '{}' is not valid hex",
-                    input_mask
-                );
-                std::process::exit(1);
-            }
+                // Validate hex format
+                if hex::decode(input_prefix).is_err() {
+                    eprintln!("Error: client_random_prefix '{}' is not valid hex", prefix);
+                    std::process::exit(1);
+                }
 
-            // Validate against rules.toml
-            if let Some(rules_engine) = settings.get_rules_engine() {
-                let input_mask: Option<&str> = if input_mask.is_empty() {
-                    None
-                } else {
-                    Some(input_mask)
-                };
+                if (has_slash && input_mask.is_empty())
+                    || (!input_mask.is_empty() && hex::decode(input_mask).is_err())
+                {
+                    eprintln!(
+                        "Error: client_random_prefix mask '{}' is not valid hex",
+                        input_mask
+                    );
+                    std::process::exit(1);
+                }
 
-                let matching_rule = rules_engine.config().rule.iter().find(|rule| {
-                    rule.client_random_prefix
-                        .as_ref()
-                        .map(|p| {
-                            let (rule_prefix, rule_mask): (&str, Option<&str>) = p
-                                .split_once('/')
-                                .map(|(a, b)| (a, Some(b)))
-                                .unwrap_or((p.as_str(), None));
+                // Validate against rules.toml
+                if let Some(rules_engine) = settings.get_rules_engine() {
+                    let input_mask: Option<&str> = if input_mask.is_empty() {
+                        None
+                    } else {
+                        Some(input_mask)
+                    };
 
-                            // Prefix parts must be equal
-                            if rule_prefix != input_prefix {
-                                return false;
-                            }
+                    let matching_rule = rules_engine.config().rule.iter().find(|rule| {
+                        rule.client_random_prefix
+                            .as_ref()
+                            .map(|p| {
+                                let (rule_prefix, rule_mask): (&str, Option<&str>) = p
+                                    .split_once('/')
+                                    .map(|(a, b)| (a, Some(b)))
+                                    .unwrap_or((p.as_str(), None));
 
-                            // Mask compatibility: input mask must be same or stronger than rule mask.
-                            // "Stronger" means more bits set, i.e. (input_mask & rule_mask) == rule_mask.
-                            match (input_mask, rule_mask) {
-                                // Rule has no mask, any input mask is at least as strong
-                                (_, None) => true,
-                                // Input has no mask, strongest possible
-                                (None, Some(_)) => true,
-                                // Both have masks, input mask must cover all bits of rule mask
-                                (Some(mi_str), Some(mr_str)) => {
-                                    match (hex::decode(mi_str), hex::decode(mr_str)) {
-                                        (Ok(mi), Ok(mr)) => {
-                                            mi.len() >= mr.len()
-                                                && (0..mr.len()).all(|i| mi[i] & mr[i] == mr[i])
+                                // Prefix parts must be equal
+                                if rule_prefix != input_prefix {
+                                    return false;
+                                }
+
+                                // Mask compatibility: input mask must be same or stronger than rule mask.
+                                // "Stronger" means more bits set, i.e. (input_mask & rule_mask) == rule_mask.
+                                match (input_mask, rule_mask) {
+                                    // Rule has no mask, any input mask is at least as strong
+                                    (_, None) => true,
+                                    // Input has no mask, strongest possible
+                                    (None, Some(_)) => true,
+                                    // Both have masks, input mask must cover all bits of rule mask
+                                    (Some(mi_str), Some(mr_str)) => {
+                                        match (hex::decode(mi_str), hex::decode(mr_str)) {
+                                            (Ok(mi), Ok(mr)) => {
+                                                mi.len() >= mr.len()
+                                                    && (0..mr.len()).all(|i| mi[i] & mr[i] == mr[i])
+                                            }
+                                            _ => false,
                                         }
-                                        _ => false,
                                     }
                                 }
-                            }
-                        })
-                        .unwrap_or(false)
-                });
+                            })
+                            .unwrap_or(false)
+                    });
 
-                // Print warning and continue, do not panic because it's optional field
-                match matching_rule {
-                    None => {
-                        eprintln!(
+                    // Print warning and continue, do not panic because it's optional field
+                    match matching_rule {
+                        None => {
+                            eprintln!(
                             "Warning: No rule found in rules.toml matching client_random_prefix '{}'. This field will be ignored.",
                             prefix
                         );
-                        client_random_prefix = None;
-                    }
-                    Some(rule) if rule.action == trusttunnel::rules::RuleAction::Deny => {
-                        eprintln!(
+                            client_random_prefix = None;
+                        }
+                        Some(rule) if rule.action == trusttunnel::rules::RuleAction::Deny => {
+                            eprintln!(
                             "Warning: Matched rule in rules.toml for client_random_prefix '{}' has action 'deny'.",
                             prefix
                         );
+                        }
+                        Some(_) => {}
                     }
-                    Some(_) => {}
                 }
             }
         }
